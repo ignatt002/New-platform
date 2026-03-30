@@ -1,0 +1,1943 @@
+        /* ===================================================
+           КОНСТРУКТОР КУРСА (БАЗА ДАННЫХ)
+           Здесь вы можете легко добавлять темы, кругляшки и уроки!
+           =================================================== */
+        let COURSE_DATA = {
+            topics: [],
+            lessons: {}
+        };
+
+        // ===================================================
+        // СЮДА ВСТАВЛЯТЬ ССЫЛКИ НА RAW ФАЙЛЫ С ГИТХАБА (в формате JSON)
+        // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
+        // ===================================================
+        const TOPIC_URLS = [
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/proba%20algebra.json",
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/proba%20algebra.json",
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/AItema"
+        ];
+
+        // ===================================================
+        // СЮДА ВСТАВЛЯТЬ ССЫЛКИ НА ФАЙЛЫ СО ШПАРГАЛКАМИ (в формате JSON)
+        // Пример: "https://raw.githubusercontent.com/username/repo/main/cheatsheets.json"
+        // ===================================================
+        const CHEAT_SHEET_URLS = [
+            // Сюда добавьте ссылку на ваш отдельный JSON файл со шпаргалками
+        ];
+
+        async function loadCourseData() {
+            const topicsContainer = document.getElementById('topics-container');
+            
+            if (TOPIC_URLS.length === 0) {
+                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #afafaf; font-weight: 700;">Нет добавленных тем.<br>Добавьте ссылки в массив TOPIC_URLS в коде.</div>';
+                return;
+            }
+
+            topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #1CB0F6; font-weight: 800; font-size: 20px;">Загрузка тем...</div>';
+
+            try {
+                const fetchPromises = TOPIC_URLS.map(url => fetch(url).then(res => {
+                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    return res.json();
+                }));
+                
+                const csPromises = CHEAT_SHEET_URLS.map(url => fetch(url).then(res => {
+                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    return res.json();
+                }));
+
+                const [topicsData, csData] = await Promise.all([
+                    Promise.all(fetchPromises),
+                    Promise.all(csPromises)
+                ]);
+
+                topicsData.forEach((data, index) => {
+                    if (data.topic) {
+                        // Клонируем объект, чтобы не мутировать исходный, если ссылки одинаковые
+                        let topicCopy = JSON.parse(JSON.stringify(data.topic));
+                        // Гарантируем уникальность ID, добавляя индекс
+                        topicCopy.id = topicCopy.id + '-' + index;
+                        COURSE_DATA.topics.push(topicCopy);
+                    }
+                    if (data.lessons) {
+                        Object.assign(COURSE_DATA.lessons, data.lessons);
+                    }
+                    // Оставляем поддержку шпаргалок внутри тем для обратной совместимости
+                    if (data.cheatSheets && Array.isArray(data.cheatSheets)) {
+                        data.cheatSheets.forEach(sheet => {
+                            if (!cheatSheetsConfig.find(s => s.id === sheet.id)) {
+                                cheatSheetsConfig.push(sheet);
+                            }
+                        });
+                    }
+                });
+
+                // Обработка отдельных файлов со шпаргалками
+                csData.forEach(data => {
+                    if (data.cheatSheets && Array.isArray(data.cheatSheets)) {
+                        data.cheatSheets.forEach(sheet => {
+                            if (!cheatSheetsConfig.find(s => s.id === sheet.id)) {
+                                cheatSheetsConfig.push(sheet);
+                            }
+                        });
+                    }
+                });
+
+                // После загрузки всех данных рендерим темы
+                preprocessCourseData();
+                renderTopics();
+            } catch (error) {
+                console.error("Ошибка при загрузке данных:", error);
+                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Проверьте ссылки на GitHub и формат файлов (должен быть корректный JSON).</div>';
+            }
+        }
+
+        /* ---------------------------------------------------
+           ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ЛОГИКА
+           --------------------------------------------------- */
+        
+        // НАСТРОЙКИ ШПАРГАЛОК
+        // Здесь вы можете добавлять новые темы и шпаргалки.
+        // type: 'text' - обычный текст
+        // type: 'table' - таблица в вашем формате
+        let cheatSheetsConfig = [];
+
+        function parseCustomTable(text) {
+            let cols = 1, rows = 1;
+            const colMatch = text.match(/столбов:\s*(\d+)/i);
+            if (colMatch) cols = parseInt(colMatch[1]);
+            
+            const rowMatch = text.match(/строк:\s*(\d+)/i);
+            if (rowMatch) rows = parseInt(rowMatch[1]);
+            
+            const data = Array.from({length: rows}, () => Array(cols).fill(''));
+            
+            const cellRegex = /столб\s+(\d+)[,\s]*строка\s+(\d+)[:\s]+([\s\S]*?)(?=(?:столб\s+\d+[,\s]*строка\s+\d+[:\s]+)|$)/gi;
+            
+            let match;
+            while ((match = cellRegex.exec(text)) !== null) {
+                const c = parseInt(match[1]) - 1;
+                const r = parseInt(match[2]) - 1;
+                let content = match[3].trim();
+                if (content.endsWith('.')) {
+                    content = content.slice(0, -1).trim();
+                }
+                if (r >= 0 && r < rows && c >= 0 && c < cols) {
+                    data[r][c] = content;
+                }
+            }
+            return { cols, rows, data };
+        }
+
+        function toggleCheatSheet() {
+            const wrapper = document.getElementById('cheat-sheet-wrapper');
+            if (wrapper.classList.contains('active')) {
+                closeCheatSheet();
+            } else {
+                openCheatSheetMenu();
+            }
+        }
+
+        function animateCSBody(direction, renderCallback) {
+            const body = document.getElementById('cs-body');
+            const title = document.getElementById('cs-title');
+            const modal = document.querySelector('.cs-modal');
+            
+            const startHeight = modal.offsetHeight;
+            modal.style.height = startHeight + 'px';
+            
+            body.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+            body.style.opacity = '0';
+            body.style.transform = direction === 'forward' ? 'translateX(-20px)' : 'translateX(20px)';
+            
+            title.style.opacity = '0';
+
+            setTimeout(() => {
+                renderCallback();
+                
+                modal.style.height = 'auto';
+                const targetHeight = modal.offsetHeight;
+                
+                modal.style.height = startHeight + 'px';
+                void modal.offsetHeight;
+                
+                modal.style.height = targetHeight + 'px';
+                
+                body.style.transition = 'none';
+                body.style.transform = direction === 'forward' ? 'translateX(20px)' : 'translateX(-20px)';
+                
+                void body.offsetWidth;
+                
+                body.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                body.style.opacity = '1';
+                body.style.transform = 'translateX(0)';
+                
+                title.style.opacity = '1';
+                
+                setTimeout(() => {
+                    modal.style.height = '';
+                }, 300);
+            }, 150);
+        }
+
+        function openCheatSheetMenu(isBack = false) {
+            const overlay = document.getElementById('cs-overlay');
+            const wrapper = document.getElementById('cheat-sheet-wrapper');
+            const isOpen = wrapper.classList.contains('active');
+            
+            const render = () => {
+                const body = document.getElementById('cs-body');
+                const title = document.getElementById('cs-title');
+                const backBtn = document.getElementById('cs-back-btn');
+                
+                title.innerText = 'Шпаргалки';
+                backBtn.classList.remove('visible');
+                body.innerHTML = '';
+                
+                if (cheatSheetsConfig.length === 0) {
+                    body.innerHTML = '<div class="cs-text" style="text-align:center; color:#999;">Шпаргалки пока не добавлены</div>';
+                    return;
+                }
+
+                cheatSheetsConfig.forEach(sheet => {
+                    const btn = document.createElement('button');
+                    btn.className = 'cs-topic-btn';
+                    btn.innerText = sheet.title;
+                    btn.onclick = () => openCheatSheetTopic(sheet.id);
+                    body.appendChild(btn);
+                });
+            };
+
+            if (isOpen && isBack) {
+                animateCSBody('backward', render);
+            } else {
+                render();
+                overlay.classList.add('active');
+                wrapper.classList.add('active');
+            }
+        }
+
+        function closeCheatSheet() {
+            document.getElementById('cs-overlay').classList.remove('active');
+            document.getElementById('cheat-sheet-wrapper').classList.remove('active');
+        }
+
+        function openCheatSheetTopic(id) {
+            const sheet = cheatSheetsConfig.find(s => s.id === id);
+            if (!sheet) return;
+            
+            const render = () => {
+                const body = document.getElementById('cs-body');
+                const title = document.getElementById('cs-title');
+                const backBtn = document.getElementById('cs-back-btn');
+                
+                title.innerText = sheet.title;
+                backBtn.classList.add('visible');
+                body.innerHTML = '';
+                
+                sheet.items.forEach(item => {
+                    if (item.type === 'text') {
+                        const div = document.createElement('div');
+                        div.className = 'cs-text';
+                        div.innerHTML = item.content;
+                        body.appendChild(div);
+                    } else if (item.type === 'table') {
+                        const parsed = parseCustomTable(item.content);
+                        const table = document.createElement('table');
+                        table.className = 'cs-table';
+                        
+                        parsed.data.forEach(rowData => {
+                            const tr = document.createElement('tr');
+                            rowData.forEach(cellData => {
+                                const td = document.createElement('td');
+                                td.innerHTML = cellData;
+                                tr.appendChild(td);
+                            });
+                            table.appendChild(tr);
+                        });
+                        body.appendChild(table);
+                    }
+                });
+                
+                if (window.MathJax) {
+                    MathJax.typesetPromise([body]).catch((err) => console.log(err.message));
+                }
+            };
+
+            animateCSBody('forward', render);
+        }
+
+        let currentTopic = null;
+        let currentLesson = null;
+        let currentLessonId = null;
+        let currentTaskIndex = 0;
+        let lessonStartTime = 0;
+        let lessonErrors = 0;
+
+        // Инициализация при загрузке
+        function preprocessCourseData() {
+            COURSE_DATA.topics.forEach(topic => {
+                topic.subtopics.forEach(subtopic => {
+                    let finalLevels = [];
+                    let pendingPlaced = [];
+                    let regularLevels = [];
+                    
+                    subtopic.levels.forEach(level => {
+                        const levelId = typeof level === 'object' ? level.lessonId : level;
+                        const lesson = COURSE_DATA.lessons[levelId];
+                        if (lesson && lesson.placeAfter !== undefined) {
+                            pendingPlaced.push(level);
+                        } else {
+                            regularLevels.push(level);
+                        }
+                    });
+                    
+                    let toInsert0 = pendingPlaced.filter(level => {
+                        const levelId = typeof level === 'object' ? level.lessonId : level;
+                        return COURSE_DATA.lessons[levelId].placeAfter === 0;
+                    });
+                    finalLevels.push(...toInsert0);
+                    
+                    let regCount = 0;
+                    for (let i = 0; i < regularLevels.length; i++) {
+                        const level = regularLevels[i];
+                        finalLevels.push(level);
+                        
+                        const levelId = typeof level === 'object' ? level.lessonId : level;
+                        const lesson = COURSE_DATA.lessons[levelId];
+                        if (!lesson || !lesson.isTest) {
+                            regCount++;
+                        }
+                        
+                        let toInsert = pendingPlaced.filter(l => {
+                            const lId = typeof l === 'object' ? l.lessonId : l;
+                            return COURSE_DATA.lessons[lId].placeAfter === regCount;
+                        });
+                        finalLevels.push(...toInsert);
+                    }
+                    
+                    let placedSoFar = new Set(finalLevels);
+                    pendingPlaced.forEach(level => {
+                        if (!placedSoFar.has(level)) {
+                            finalLevels.push(level);
+                        }
+                    });
+                    
+                    subtopic.levels = finalLevels;
+                });
+            });
+        }
+
+        window.onload = () => {
+            loadCourseData();
+            initLongPressKeys();
+        };
+
+        function renderTopics() {
+            const topicsContainer = document.getElementById('topics-container');
+            topicsContainer.innerHTML = '';
+            
+            COURSE_DATA.topics.forEach(topic => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'topic-wrapper';
+                
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'topic-btn-group';
+                
+                const mainBtn = document.createElement('button');
+                mainBtn.className = 'topic-main-btn';
+                mainBtn.innerText = topic.title;
+                mainBtn.onclick = () => openTopic(topic.id, 0);
+                
+                const divider = document.createElement('div');
+                divider.className = 'topic-divider';
+                
+                const arrowBtn = document.createElement('button');
+                arrowBtn.className = 'topic-arrow-btn';
+                arrowBtn.innerHTML = '<span class="arrow-icon">▼</span>';
+                arrowBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const subWrapper = document.getElementById(`sub-${topic.id}`);
+                    subWrapper.classList.toggle('expanded');
+                    arrowBtn.classList.toggle('expanded');
+                    divider.classList.toggle('hidden');
+                };
+                
+                btnGroup.appendChild(mainBtn);
+                btnGroup.appendChild(divider);
+                btnGroup.appendChild(arrowBtn);
+                
+                const subWrapper = document.createElement('div');
+                subWrapper.id = `sub-${topic.id}`;
+                subWrapper.className = 'subtopics-wrapper';
+                
+                const subContainer = document.createElement('div');
+                subContainer.className = 'subtopics-container';
+                
+                const subInner = document.createElement('div');
+                subInner.className = 'subtopics-inner';
+                
+                topic.subtopics.forEach((sub, index) => {
+                    const subRow = document.createElement('button');
+                    subRow.className = 'subtopic-row';
+                    subRow.innerText = sub.title;
+                    subRow.onclick = () => openTopic(topic.id, index);
+                    
+                    subInner.appendChild(subRow);
+                });
+                
+                subContainer.appendChild(subInner);
+                subWrapper.appendChild(subContainer);
+                
+                wrapper.appendChild(btnGroup);
+                wrapper.appendChild(subWrapper);
+                topicsContainer.appendChild(wrapper);
+            });
+        }
+
+        function initLongPressKeys() {
+            let popupTimeout;
+            let activePopup = null;
+
+            document.querySelectorAll('.has-popup').forEach(key => {
+                const baseVal = key.getAttribute('data-base');
+                const popupVals = key.getAttribute('data-popup').split(',');
+
+                const handleStart = (e) => {
+                    e.preventDefault(); // Prevent focus loss
+                    if (activePopup && activePopup.parentNode !== key) {
+                        activePopup.remove();
+                        activePopup = null;
+                    }
+                    if (activePopup && activePopup.parentNode === key) {
+                        return; // Already open
+                    }
+                    key.classList.add('active-press');
+                    popupTimeout = setTimeout(() => {
+                        key.classList.remove('active-press');
+                        showPopup(key, popupVals);
+                    }, 400); // 400ms long press
+                };
+
+                const handleEnd = (e) => {
+                    e.preventDefault();
+                    clearTimeout(popupTimeout);
+                    if (key.classList.contains('active-press')) {
+                        // Short press
+                        key.classList.remove('active-press');
+                        insertMath(baseVal);
+                    }
+                };
+
+                key.addEventListener('mousedown', handleStart);
+                key.addEventListener('mouseup', handleEnd);
+                key.addEventListener('mouseleave', () => {
+                    clearTimeout(popupTimeout);
+                    key.classList.remove('active-press');
+                });
+
+                key.addEventListener('touchstart', handleStart, {passive: false});
+                key.addEventListener('touchend', handleEnd, {passive: false});
+                key.addEventListener('touchcancel', () => {
+                    clearTimeout(popupTimeout);
+                    key.classList.remove('active-press');
+                });
+            });
+
+            function showPopup(key, vals) {
+                const popup = document.createElement('div');
+                popup.className = 'math-key-popup';
+                vals.forEach(val => {
+                    const btn = document.createElement('button');
+                    btn.className = 'math-popup-btn';
+                    btn.innerText = val;
+                    
+                    const triggerInsert = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        insertMath(val);
+                        popup.remove();
+                        activePopup = null;
+                    };
+                    
+                    btn.addEventListener('mousedown', triggerInsert);
+                    btn.addEventListener('touchstart', triggerInsert, {passive: false});
+                    popup.appendChild(btn);
+                });
+                key.appendChild(popup);
+                activePopup = popup;
+            }
+
+            // Close popup if clicking elsewhere
+            const closePopup = (e) => {
+                if (activePopup && !activePopup.contains(e.target) && activePopup.parentNode !== e.target) {
+                    activePopup.remove();
+                    activePopup = null;
+                }
+            };
+            document.addEventListener('mousedown', closePopup);
+            document.addEventListener('touchstart', closePopup, {passive: false});
+        }
+
+        let isNavigating = false;
+        function navigateMenu(targetPageId) {
+            if (isNavigating) return;
+            
+            const currentId = targetPageId === 'page-path' ? 'page-topics' : 'page-path';
+            const current = document.getElementById(currentId);
+            const target = document.getElementById(targetPageId);
+            
+            if (current.classList.contains('hidden')) {
+                target.classList.remove('hidden');
+                return;
+            }
+
+            isNavigating = true;
+            const isForward = targetPageId === 'page-path';
+            
+            current.style.animation = isForward ? 'slideOutLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideOutRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+            
+            setTimeout(() => {
+                current.classList.add('hidden');
+                current.style.animation = '';
+                
+                target.classList.remove('hidden');
+                target.style.animation = isForward ? 'slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideInLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+                window.scrollTo(0, 0);
+                
+                setTimeout(() => {
+                    target.style.animation = '';
+                    isNavigating = false;
+                }, 300);
+            }, 250);
+        }
+
+        // Вспомогательная функция для затемнения цвета (для 3D тени)
+        function darkenColor(hex, percent) {
+            hex = hex.replace(/^\s*#|\s*$/g, '');
+            if(hex.length === 3) hex = hex.replace(/(.)/g, '$1$1');
+            let r = parseInt(hex.substr(0, 2), 16),
+                g = parseInt(hex.substr(2, 2), 16),
+                b = parseInt(hex.substr(4, 2), 16);
+            r = Math.max(0, Math.floor(r * (1 - percent / 100)));
+            g = Math.max(0, Math.floor(g * (1 - percent / 100)));
+            b = Math.max(0, Math.floor(b * (1 - percent / 100)));
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        let currentTopicId = null;
+        let currentSubtopicIndex = null;
+
+        function openTopic(topicId, subtopicIndex) {
+            currentTopicId = topicId;
+            currentSubtopicIndex = subtopicIndex;
+            const topic = COURSE_DATA.topics.find(t => t.id === topicId);
+            const subtopic = topic.subtopics[subtopicIndex];
+            
+            const pathHeaderBlock = document.getElementById('path-header-block');
+            pathHeaderBlock.style.backgroundColor = topic.color;
+            pathHeaderBlock.style.borderColor = topic.color;
+            pathHeaderBlock.style.boxShadow = `0 4px 0 ${darkenColor(topic.color, 20)}`;
+            
+            const pathTitle = document.getElementById('path-title');
+            pathTitle.innerText = subtopic.title;
+
+            const theoryBtn = document.getElementById('btn-topic-theory');
+            const theoryDivider = document.getElementById('path-theory-divider');
+            if (topic.theory || subtopic.theory) {
+                theoryBtn.classList.remove('hidden');
+                theoryDivider.classList.remove('hidden');
+            } else {
+                theoryBtn.classList.add('hidden');
+                theoryDivider.classList.add('hidden');
+            }
+
+            const pathContainer = document.getElementById('path-container');
+            pathContainer.innerHTML = '';
+
+            let displayCounter = 1;
+            subtopic.levels.forEach((level, index) => {
+                const lessonId = typeof level === 'object' ? level.lessonId : level;
+                const lesson = COURSE_DATA.lessons[lessonId];
+                
+                const btn = document.createElement('button');
+                btn.className = 'level-circle';
+                
+                if (lesson && lesson.isTest) {
+                    btn.innerText = 'КР';
+                    btn.style.fontSize = '28px';
+                    btn.style.fontWeight = '900';
+                } else if (lesson && lesson.isRepetition) {
+                    btn.innerHTML = '&#8635;';
+                    btn.style.fontSize = '40px';
+                    btn.style.fontWeight = '900';
+                    btn.style.lineHeight = '1';
+                } else if (lesson && lesson.isGenerator) {
+                    btn.innerText = 'ГЕН';
+                    btn.style.fontSize = '20px';
+                    btn.style.fontWeight = '900';
+                } else {
+                    btn.innerText = displayCounter++;
+                }
+
+                const shadowColor = darkenColor(topic.color, 20);
+                btn.style.backgroundColor = topic.color;
+                btn.style.setProperty('--shadow-color', shadowColor);
+                
+                btn.onclick = (e) => showLessonPopup(e, lessonId, btn, topic.color, subtopic.title);
+                
+                pathContainer.appendChild(btn);
+            });
+
+            navigateMenu('page-path');
+        }
+
+        let activeLessonPopup = null;
+
+        function showLessonPopup(e, lessonId, btn, topicColor, topicTitle) {
+            e.stopPropagation();
+            const popup = document.getElementById('lesson-popup');
+            const lesson = COURSE_DATA.lessons[lessonId];
+            
+            if (!lesson) return;
+
+            document.getElementById('lesson-popup-title').innerText = lesson.title || 'Урок';
+            
+            let tasksCount = 0;
+            if (lesson.isRepetition) {
+                tasksCount = lesson.tasksToGather || 0;
+            } else {
+                tasksCount = lesson.tasks ? lesson.tasks.length : 0;
+            }
+            
+            let taskWord = "заданий";
+            if (tasksCount % 10 === 1 && tasksCount % 100 !== 11) taskWord = "задание";
+            else if ([2,3,4].includes(tasksCount % 10) && ![12,13,14].includes(tasksCount % 100)) taskWord = "задания";
+            
+            document.getElementById('lesson-popup-tasks').innerText = `${tasksCount} ${taskWord}`;
+            
+            const startBtn = document.getElementById('lesson-popup-start');
+            startBtn.style.backgroundColor = topicColor;
+            startBtn.style.boxShadow = `0 4px 0 ${darkenColor(topicColor, 20)}`;
+            
+            startBtn.onclick = () => {
+                popup.classList.add('popup-hidden');
+                startLesson(lessonId);
+            };
+
+            // Позиционируем попап над кнопкой
+            const rect = btn.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            
+            popup.style.top = `${rect.top + scrollTop}px`;
+            popup.style.left = `${rect.left + scrollLeft + rect.width / 2}px`;
+            
+            // Force reflow to ensure the transition plays when removing popup-hidden
+            void popup.offsetWidth;
+            
+            popup.classList.remove('popup-hidden');
+            activeLessonPopup = popup;
+        }
+
+        // Закрытие попапа при клике вне его
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('lesson-popup');
+            if (popup && !popup.classList.contains('popup-hidden') && !popup.contains(e.target)) {
+                popup.classList.add('popup-hidden');
+            }
+        });
+
+        function startLesson(lessonId) {
+            lessonStartTime = Date.now();
+            lessonErrors = 0;
+            currentLessonId = lessonId;
+            currentLesson = COURSE_DATA.lessons[lessonId];
+            if (!currentLesson) {
+                alert("Ошибка! Урок не найден в базе данных.");
+                return;
+            }
+            
+            currentTopic = null;
+            currentTopicId = null;
+            currentSubtopicIndex = null;
+            for (const t of COURSE_DATA.topics) {
+                for (let i = 0; i < t.subtopics.length; i++) {
+                    const st = t.subtopics[i];
+                    if (st.levels.some(l => (typeof l === 'object' ? l.lessonId : l) == lessonId)) {
+                        currentTopic = t;
+                        currentTopicId = t.id;
+                        currentSubtopicIndex = i;
+                        break;
+                    }
+                }
+                if (currentTopic) break;
+            }
+
+            // Управление видимостью шпаргалок
+            const csWrapper = document.getElementById('cheat-sheet-wrapper');
+            if (csWrapper) {
+                if (currentLesson.disableCheatSheet) {
+                    csWrapper.style.display = 'none';
+                } else {
+                    csWrapper.style.display = 'flex';
+                }
+            }
+
+            const genControls = document.getElementById('generator-controls');
+            if (currentLesson.isGenerator) {
+                genControls.style.display = 'flex';
+                const chaosLevel = parseInt(document.getElementById('chaos-level').value) || 2;
+                currentLesson.tasks = generateTasks(currentLesson, chaosLevel, 1);
+            } else {
+                genControls.style.display = 'none';
+            }
+
+            if (currentLesson.isRepetition) {
+                let parentTopic = null;
+                for (const t of COURSE_DATA.topics) {
+                    for (const st of t.subtopics) {
+                        if (st.levels.some(l => (typeof l === 'object' ? l.lessonId : l) == lessonId)) {
+                            parentTopic = t;
+                            break;
+                        }
+                    }
+                    if (parentTopic) break;
+                }
+
+                if (parentTopic) {
+                    let allTasks = [];
+                    parentTopic.subtopics.forEach(st => {
+                        st.levels.forEach(l => {
+                            const lId = typeof l === 'object' ? l.lessonId : l;
+                            const lesson = COURSE_DATA.lessons[lId];
+                            if (lesson && !lesson.isRepetition && lesson.tasks) {
+                                lesson.tasks.forEach(task => {
+                                    if (task['повторение темы'] === 'нет' || task['повторение темы'] === false) return;
+                                    if (task.correctAnswer !== undefined && task.correctAnswer !== "") {
+                                        allTasks.push({...task});
+                                    }
+                                });
+                            }
+                        });
+                    });
+
+                    allTasks.sort(() => Math.random() - 0.5);
+                    const count = currentLesson.tasksToGather || 5;
+                    currentLesson.tasks = allTasks.slice(0, count);
+                    
+                    if (currentLesson.tasks.length === 0) {
+                        alert("Не найдено заданий для повторения!");
+                        return;
+                    }
+                }
+            }
+
+            currentTaskIndex = 0;
+            loadTask();
+
+            const menuView = document.getElementById('menu-view');
+            const lessonView = document.getElementById('lesson-view');
+            
+            menuView.style.animation = 'viewFadeOut 0.3s forwards';
+            setTimeout(() => {
+                menuView.classList.add('hidden');
+                menuView.style.animation = '';
+                
+                lessonView.classList.remove('hidden');
+                lessonView.style.animation = 'viewFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+                window.scrollTo(0, 0);
+            }, 250);
+        }
+
+        function regenerateTasks() {
+            if (!currentLesson || !currentLesson.isGenerator) return;
+            const chaosLevel = parseInt(document.getElementById('chaos-level').value) || 2;
+            currentLesson.tasks = generateTasks(currentLesson, chaosLevel, 1);
+            currentTaskIndex = 0;
+            loadTask();
+        }
+
+        function generateTasks(lesson, chaosLevel, tasksCount = 1) {
+            const maxVal = chaosLevel * 10;
+            const formulasStr = lesson.generatorFormulas || "";
+            const formulas = formulasStr.split(' ИЛИ ').map(s => s.trim());
+            const explanations = lesson.generatorExplanations || [];
+            
+            const tasks = [];
+            
+            for (let i = 0; i < tasksCount; i++) {
+                const formulaIndex = Math.floor(Math.random() * formulas.length);
+                const formula = formulas[formulaIndex];
+                const parts = formula.split('=');
+                const leftSide = parts[0].trim();
+                const rightSide = parts[1] ? parts[1].trim() : "0";
+                
+                const cleanStr = formula.replace(/\\[a-zA-Z]+/g, '');
+                const varsMatch = cleanStr.match(/[a-zA-Z]/g) || [];
+                const vars = [...new Set(varsMatch)];
+                
+                let bestVars = {};
+                let bestAnswer = 0;
+                let found = false;
+                
+                for (let attempt = 0; attempt < 1000; attempt++) {
+                    let currentVars = {};
+                    vars.forEach(v => {
+                        currentVars[v] = Math.floor(Math.random() * maxVal) + 1;
+                    });
+                    
+                    let evalStr = rightSide;
+                    evalStr = evalStr.replace(/\\frac{([^{}]+)}{([^{}]+)}/g, "($1)/($2)");
+                    evalStr = evalStr.replace(/\\cdot/g, "*");
+                    evalStr = evalStr.replace(/:/g, "/");
+                    
+                    vars.forEach(v => {
+                        const regex = new RegExp(`\\b${v}\\b`, 'g');
+                        evalStr = evalStr.replace(regex, currentVars[v]);
+                    });
+                    
+                    try {
+                        const ans = eval(evalStr);
+                        if (isFinite(ans) && Math.abs(ans * 100 - Math.round(ans * 100)) < 0.0001) {
+                            bestVars = currentVars;
+                            bestAnswer = Math.round(ans * 100) / 100;
+                            found = true;
+                            break;
+                        }
+                    } catch (e) {}
+                }
+                
+                if (!found) {
+                    vars.forEach(v => bestVars[v] = 2);
+                    bestAnswer = 1;
+                }
+                
+                let taskText = leftSide;
+                vars.forEach(v => {
+                    const regex = new RegExp(`\\b${v}\\b`, 'g');
+                    taskText = taskText.replace(regex, bestVars[v]);
+                });
+                
+                let explanationStr = "";
+                if (explanations && explanations.length > formulaIndex) {
+                    explanationStr = explanations[formulaIndex];
+                } else {
+                    explanationStr = lesson.generatorExplanation || "Объяснение генератора.";
+                }
+                
+                let explParts = explanationStr.split(';').map(s => s.trim()).filter(s => s.length > 0);
+                let explanationFields = explParts;
+                
+                tasks.push({
+                    type: "input",
+                    text: `Вычислите:<br>\\[ ${taskText} \\]`,
+                    correctAnswer: bestAnswer.toString(),
+                    explanationFields: explanationFields,
+                    isOge: lesson.isOge || false
+                });
+            }
+            return tasks;
+        }
+
+        function loadTask() {
+            document.getElementById('l-main').scrollTop = 0;
+            const task = currentLesson.tasks[currentTaskIndex];
+
+            // Заголовок и путь
+            const taskCountText = currentLesson.isGenerator ? ` (Задание ${currentTaskIndex + 1})` : (currentLesson.tasks.length > 1 ? ` (Задание ${currentTaskIndex + 1} из ${currentLesson.tasks.length})` : '');
+            document.getElementById('l-path').innerText = currentLesson.path + taskCountText;
+            document.getElementById('l-title').innerText = currentLesson.title;
+
+            // Динамическая генерация текста и кода
+            const bubble = document.getElementById('l-example-bubble');
+            bubble.innerHTML = '';
+
+            if (task.isOge) {
+                const ogeLabel = document.createElement('div');
+                ogeLabel.className = 'oge-label';
+                ogeLabel.innerText = 'задача из ОГЭ';
+                bubble.appendChild(ogeLabel);
+            }
+
+            for (const key in task) {
+                if (key.startsWith('text')) {
+                    const textVal = task[key];
+                    if (textVal && textVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'task-text-block';
+                        div.innerHTML = autoWrapMath(textVal);
+                        bubble.appendChild(div);
+                    }
+                } else if (key.startsWith('code')) {
+                    const codeVal = task[key];
+                    if (codeVal && codeVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'code-box';
+                        let codeText = codeVal.trim();
+                        codeText = codeText.replace(/^\$+/, '').replace(/\$+$/, '').trim();
+                        if (!codeText.startsWith('\\[')) {
+                            codeText = `\\[ ${codeText} \\]`;
+                        }
+                        div.innerHTML = codeText.replace(/\n/g, '<br>');
+                        bubble.appendChild(div);
+                    }
+                }
+            }
+
+            // Сброс полей
+            const lAnswer = document.getElementById('l-answer');
+            const lDraft = document.getElementById('l-draft');
+            const lAnswerContainer = document.getElementById('l-answer-container');
+            const lDraftContainer = document.getElementById('l-draft-container');
+            
+            lAnswer.value = '';
+            lAnswer.disabled = false;
+            lDraft.value = '';
+            
+            resetErrorState();
+
+            const btnCheck = document.getElementById('btn-check');
+            const btnNext = document.getElementById('btn-next');
+
+            if (!task.correctAnswer || task.correctAnswer.trim() === "") {
+                // Режим теории (нет правильного ответа)
+                lDraftContainer.style.display = 'none';
+                lAnswerContainer.style.display = 'none';
+                btnCheck.classList.add('hidden');
+                btnNext.classList.remove('hidden');
+                document.getElementById('btn-next-text').innerText = 'Понятно';
+            } else {
+                // Режим практики
+                lDraftContainer.style.display = '';
+                lAnswerContainer.style.display = '';
+                document.getElementById('btn-next-text').innerText = 'Дальше';
+            }
+
+            const footerButtons = document.getElementById('footer-buttons');
+            const showTheoryBtn = task.hasTheory !== undefined ? task.hasTheory : currentLesson.hasTheory;
+            if (showTheoryBtn) {
+                footerButtons.classList.add('has-theory');
+            } else {
+                footerButtons.classList.remove('has-theory');
+            }
+
+            // Перезапуск анимаций
+            const mainContent = document.getElementById('l-main');
+            mainContent.style.display = 'none';
+            mainContent.offsetHeight;
+            mainContent.style.display = 'flex';
+
+            // Рендерим MathJax для текста задания
+            if (window.MathJax) {
+                MathJax.typesetPromise([document.getElementById('l-example-bubble')]).catch((err) => console.log(err.message));
+            }
+        }
+
+        function confirmCloseLesson() {
+            const overlay = document.getElementById('exit-confirm-overlay');
+            const content = document.getElementById('exit-confirm-content');
+            overlay.classList.remove('hidden');
+            void overlay.offsetWidth;
+            overlay.style.opacity = '1';
+            content.style.transform = 'translateY(0)';
+        }
+
+        function closeExitConfirmModal() {
+            const overlay = document.getElementById('exit-confirm-overlay');
+            const content = document.getElementById('exit-confirm-content');
+            overlay.style.opacity = '0';
+            content.style.transform = 'translateY(100%)';
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 300);
+        }
+
+        function confirmExitYes() {
+            closeExitConfirmModal();
+            setTimeout(() => {
+                actuallyCloseLesson();
+            }, 300);
+        }
+
+        function showCompletionModal() {
+            const timeSpent = Math.floor((Date.now() - lessonStartTime) / 1000);
+            const minutes = Math.floor(timeSpent / 60);
+            const seconds = timeSpent % 60;
+            const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            document.getElementById('comp-errors').innerText = lessonErrors;
+            document.getElementById('comp-time').innerText = timeString;
+            
+            const overlay = document.getElementById('completion-modal-overlay');
+            const content = document.getElementById('completion-modal-content');
+            overlay.classList.remove('hidden');
+            // Force reflow
+            void overlay.offsetWidth;
+            overlay.style.opacity = '1';
+            content.style.transform = 'scale(1)';
+        }
+
+        function closeCompletionModal() {
+            const overlay = document.getElementById('completion-modal-overlay');
+            const content = document.getElementById('completion-modal-content');
+            overlay.style.opacity = '0';
+            content.style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                actuallyCloseLesson();
+            }, 300);
+        }
+
+        function actuallyCloseLesson() {
+            closeCheatSheet();
+            const menuView = document.getElementById('menu-view');
+            const lessonView = document.getElementById('lesson-view');
+            
+            document.getElementById('lesson-dropdown').classList.add('hidden');
+            
+            lessonView.style.animation = 'viewFadeOut 0.3s forwards';
+            setTimeout(() => {
+                lessonView.classList.add('hidden');
+                lessonView.style.animation = '';
+                
+                menuView.classList.remove('hidden');
+                menuView.style.animation = 'viewFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+                window.scrollTo(0, 0);
+            }, 250);
+        }
+
+        function openTheory(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            const task = currentLesson.tasks[currentTaskIndex];
+            const showTheoryBtn = task && task.hasTheory !== undefined ? task.hasTheory : currentLesson.hasTheory;
+            
+            let subtopicTheory = null;
+            if (currentTopic && currentSubtopicIndex !== null && currentTopic.subtopics[currentSubtopicIndex]) {
+                subtopicTheory = currentTopic.subtopics[currentSubtopicIndex].theory;
+            }
+            
+            const theory = (currentLesson && currentLesson.theory) || subtopicTheory || (currentTopic && currentTopic.theory);
+            
+            if (!currentLesson || !showTheoryBtn || !theory) return;
+            
+            document.getElementById('t-title').innerText = currentLesson.title;
+            
+            const bubble = document.getElementById('t-example-bubble');
+            bubble.innerHTML = '';
+            
+            for (const key in theory) {
+                if (key.startsWith('text')) {
+                    const textVal = theory[key];
+                    if (textVal && textVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'task-text-block';
+                        div.innerHTML = autoWrapMath(textVal);
+                        bubble.appendChild(div);
+                    }
+                } else if (key.startsWith('code')) {
+                    const codeVal = theory[key];
+                    if (codeVal && codeVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'code-box';
+                        let codeText = codeVal.trim();
+                        codeText = codeText.replace(/^\$+/, '').replace(/\$+$/, '').trim();
+                        if (!codeText.startsWith('\\[')) {
+                            codeText = `\\[ ${codeText} \\]`;
+                        }
+                        div.innerHTML = codeText.replace(/\n/g, '<br>');
+                        bubble.appendChild(div);
+                    }
+                }
+            }
+            
+            document.getElementById('theory-view').classList.add('active');
+            
+            if (window.MathJax) {
+                MathJax.typesetPromise([document.getElementById('t-example-bubble')]).catch((err) => console.log(err.message));
+            }
+        }
+
+        function openTopicTheory() {
+            if (currentTopicId === null || currentSubtopicIndex === null) return;
+            
+            const topic = COURSE_DATA.topics.find(t => t.id === currentTopicId);
+            const subtopic = topic.subtopics[currentSubtopicIndex];
+            
+            const theory = subtopic.theory || topic.theory;
+            if (!theory) return;
+            
+            document.getElementById('t-title').innerText = (subtopic.theory ? subtopic.title : topic.title);
+            
+            const bubble = document.getElementById('t-example-bubble');
+            bubble.innerHTML = '';
+            
+            for (const key in theory) {
+                if (key.startsWith('text')) {
+                    const textVal = theory[key];
+                    if (textVal && textVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'task-text-block';
+                        div.innerHTML = autoWrapMath(textVal);
+                        bubble.appendChild(div);
+                    }
+                } else if (key.startsWith('code')) {
+                    const codeVal = theory[key];
+                    if (codeVal && codeVal.trim() !== "") {
+                        const div = document.createElement('div');
+                        div.className = 'code-box';
+                        let codeText = codeVal.trim();
+                        codeText = codeText.replace(/^\$+/, '').replace(/\$+$/, '').trim();
+                        if (!codeText.startsWith('\\[')) {
+                            codeText = `\\[ ${codeText} \\]`;
+                        }
+                        div.innerHTML = codeText.replace(/\n/g, '<br>');
+                        bubble.appendChild(div);
+                    }
+                }
+            }
+            
+            if (window.MathJax) {
+                MathJax.typesetPromise([document.getElementById('t-example-bubble')]).catch((err) => console.log(err.message));
+            }
+            
+            document.getElementById('theory-view').classList.add('active');
+        }
+
+        function closeTheory() {
+            document.getElementById('theory-view').classList.remove('active');
+        }
+
+        function toggleLessonMenu() {
+            const dropdown = document.getElementById('lesson-dropdown');
+            if (dropdown.classList.contains('hidden')) {
+                document.getElementById('ld-title').innerText = currentLesson.title;
+                document.getElementById('ld-progress').innerText = currentLesson.isGenerator ? `Задание ${currentTaskIndex + 1}` : `Задание ${currentTaskIndex + 1} из ${currentLesson.tasks.length}`;
+                document.getElementById('ld-code').innerText = currentLessonId;
+                dropdown.classList.remove('hidden');
+            } else {
+                dropdown.classList.add('hidden');
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('lesson-dropdown');
+            const menuBtn = document.querySelector('.lesson-menu-btn');
+            if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && e.target !== menuBtn) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        function showReportModal() {
+            document.getElementById('lesson-dropdown').classList.add('hidden');
+            document.getElementById('report-lesson-code').innerText = currentLessonId;
+            document.getElementById('report-modal-overlay').classList.remove('hidden');
+        }
+
+        function closeReportModal() {
+            document.getElementById('report-modal-overlay').classList.add('hidden');
+        }
+
+        function goToReportForm() {
+            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
+            closeReportModal();
+        }
+
+        function resetErrorState() {
+            const lAnswer = document.getElementById('l-answer');
+            lAnswer.style.borderColor = '';
+            lAnswer.style.backgroundColor = '';
+            lAnswer.style.color = '';
+            
+            const footer = document.getElementById('l-footer');
+            footer.className = 'lesson-footer';
+            document.getElementById('l-feedback-area').style.display = 'none';
+            document.getElementById('cheat-sheet-wrapper')?.classList.remove('hidden-by-footer');
+            
+            document.getElementById('btn-check').classList.remove('hidden');
+            document.getElementById('btn-next').classList.add('hidden');
+            document.getElementById('btn-retry').classList.add('hidden');
+            document.getElementById('btn-explain').classList.add('hidden');
+            document.getElementById('btn-close-explain').classList.add('hidden');
+        }
+
+        function animateFooterOpen(isSuccess, setupContentCallback) {
+            const footer = document.getElementById('l-footer');
+            document.getElementById('cheat-sheet-wrapper')?.classList.add('hidden-by-footer');
+            
+            // 1. Фиксируем текущую высоту
+            const startHeight = footer.offsetHeight;
+            
+            // Отключаем транзиции для мгновенного измерения
+            footer.style.transition = 'none';
+            
+            // 2. Выполняем коллбэк для подмены контента (он покажет фидбек и нужные кнопки)
+            setupContentCallback();
+            
+            // 3. Измеряем новую целевую высоту
+            const targetHeight = footer.offsetHeight;
+            
+            // 4. Возвращаем старую высоту и готовимся к анимации
+            footer.style.height = startHeight + 'px';
+            void footer.offsetHeight; // force reflow
+            
+            // 5. Запускаем анимацию высоты и цвета фона
+            footer.style.transition = 'height 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s ease';
+            footer.style.height = targetHeight + 'px';
+            
+            setTimeout(() => {
+                footer.style.height = '';
+                footer.style.transition = '';
+            }, 400);
+        }
+
+        function autoWrapMath(str) {
+            if (!str || typeof str !== 'string') return str;
+            if (str.includes('$') || str.includes('\\[') || str.includes('\\(')) return str;
+            
+            if (/[\\\^_]/.test(str) && !/[а-яА-ЯёЁ]/.test(str)) {
+                return `\\( ${str} \\)`;
+            }
+            
+            if (/[\\\^_]/.test(str)) {
+                return str.replace(/([a-zA-Z0-9+\-*/=<>()[\]{}\\^_.!|,\s]+)/g, function(match) {
+                    if (/[\\\^_]/.test(match)) {
+                        let trimmed = match.trim();
+                        if (trimmed) {
+                            return match.replace(trimmed, `\\( ${trimmed} \\)`);
+                        }
+                    }
+                    return match;
+                });
+            }
+            
+            return str;
+        }
+
+        function checkAnswer() {
+            closeMathKeyboard(); // Закрываем клавиатуру при проверке
+
+            const task = currentLesson.tasks[currentTaskIndex];
+            const lAnswer = document.getElementById('l-answer');
+            
+            function normalizeMath(str) {
+                if (!str) return "";
+                let s = str.replace(/\s+/g, '').toLowerCase();
+                
+                // Исправляем частую ошибку, когда в JSON забывают экранировать слеш (sqrt вместо \sqrt)
+                s = s.replace(/(^|[^\\])sqrt/g, '$1\\sqrt');
+                s = s.replace(/(^|[^\\])frac/g, '$1\\frac');
+                s = s.replace(/(^|[^\\])pi/g, '$1\\pi');
+                s = s.replace(/(^|[^\\])cdot/g, '$1\\cdot');
+                
+                s = s.replace(/\\frac(\d)(\d)/g, '\\frac{$1}{$2}'); // \frac14 -> \frac{1}{4}
+                s = s.replace(/\\sqrt(\d)(?!\d)/g, '\\sqrt{$1}'); // \sqrt7 -> \sqrt{7}
+                s = s.replace(/²/g, '^2');
+                s = s.replace(/√\(([^)]+)\)/g, '\\sqrt{$1}'); // √(...)
+                s = s.replace(/√(\d+)/g, '\\sqrt{$1}');       // √25
+                s = s.replace(/×/g, '\\cdot');
+                s = s.replace(/\\times/g, '\\cdot');
+                s = s.replace(/÷/g, '\\div');
+                s = s.replace(/≤/g, '\\le');
+                s = s.replace(/≥/g, '\\ge');
+                s = s.replace(/≠/g, '\\neq');
+                s = s.replace(/≈/g, '\\approx');
+                s = s.replace(/±/g, '\\pm');
+                s = s.replace(/∞/g, '\\infty');
+                s = s.replace(/∈/g, '\\in');
+                s = s.replace(/∪/g, '\\cup');
+                s = s.replace(/∩/g, '\\cap');
+                s = s.replace(/([a-zA-Z0-9]+)\/([a-zA-Z0-9]+)/g, '\\frac{$1}{$2}'); // 1/4 -> \frac{1}{4}
+                
+                // Удаляем \cdot перед корнями, переменными и пи (6\cdot\sqrt{7} == 6\sqrt{7})
+                s = s.replace(/\\cdot(?=\\sqrt|\\pi|[a-z])/g, '');
+                
+                // Удаляем \left и \right, так как они не влияют на математический смысл
+                s = s.replace(/\\left/g, '');
+                s = s.replace(/\\right/g, '');
+                s = s.replace(/\\mleft/g, '');
+                s = s.replace(/\\mright/g, '');
+                
+                return s;
+            }
+
+            let normalizedAnswer = normalizeMath(lAnswer.value);
+            let normalizedCorrect = normalizeMath(task.correctAnswer);
+            
+            const footer = document.getElementById('l-footer');
+
+            // Задержка для анимации закрытия клавиатуры
+            setTimeout(() => {
+                const isSuccess = (normalizedAnswer === normalizedCorrect);
+                if (!isSuccess) lessonErrors++;
+                
+                animateFooterOpen(isSuccess, () => {
+                    if(isSuccess) {
+                        // Успех
+                        footer.className = 'lesson-footer state-success';
+                        document.getElementById('l-feedback-area').style.display = 'flex';
+                        document.getElementById('l-feedback-title').innerHTML = '<span>✔</span> Отлично!';
+                        document.getElementById('l-feedback-explanation').innerHTML = ''; 
+                        
+                        document.getElementById('btn-check').classList.add('hidden');
+                        document.getElementById('btn-next').classList.remove('hidden');
+                        document.getElementById('btn-explain').classList.remove('hidden'); // Кнопка объяснения при успехе
+                        
+                        lAnswer.style.borderColor = "var(--success-color)";
+                        lAnswer.style.backgroundColor = "var(--success-bg)";
+                        lAnswer.style.color = "var(--success-shadow)";
+                        lAnswer.disabled = true;
+                    } else {
+                        // Ошибка
+                        footer.className = 'lesson-footer state-error';
+                        document.getElementById('l-feedback-area').style.display = 'flex';
+                        document.getElementById('l-feedback-title').innerHTML = '<span>✖</span> Неверно!';
+                        document.getElementById('l-feedback-explanation').innerHTML = '';
+                        
+                        document.getElementById('btn-check').classList.add('hidden');
+                        document.getElementById('btn-retry').classList.remove('hidden');
+                        document.getElementById('btn-explain').classList.remove('hidden');
+                        
+                        lAnswer.style.borderColor = "var(--error-color)";
+                        lAnswer.style.color = "var(--error-color)";
+                        
+                        lAnswer.classList.remove('shake');
+                        void lAnswer.offsetWidth;
+                        lAnswer.classList.add('shake');
+                    }
+                });
+            }, 300);
+        }
+
+        function animateFooterClose(callback) {
+            const footer = document.getElementById('l-footer');
+            const footerContent = footer.querySelector('.footer-content');
+            
+            if (!footer.classList.contains('state-success') && !footer.classList.contains('state-error')) {
+                callback();
+                return;
+            }
+
+            // 1. Фиксируем высоту
+            const startHeight = footer.offsetHeight;
+            footer.style.height = startHeight + 'px';
+            
+            // 2. Прячем контент (текст фидбека и кнопки)
+            footerContent.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+            footerContent.style.opacity = '0';
+            footerContent.style.transform = 'translateY(10px)';
+            
+            setTimeout(() => {
+                // 3. Выполняем коллбэк (он поменяет классы футера, скроет фидбек, покажет кнопку Проверить)
+                callback();
+                
+                // 4. Измеряем новую высоту (уже без state-success/error)
+                footer.style.height = '';
+                const targetHeight = footer.offsetHeight;
+                
+                // 5. Анимируем высоту и цвет фона
+                footer.style.height = startHeight + 'px';
+                void footer.offsetHeight; // force reflow
+                
+                footer.style.transition = 'height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s ease';
+                footer.style.height = targetHeight + 'px';
+                
+                // 6. Показываем новый контент (кнопку Проверить)
+                footerContent.style.transform = 'translateY(-10px)';
+                void footerContent.offsetHeight; // force reflow
+                
+                footerContent.style.transition = 'opacity 0.2s ease 0.1s, transform 0.2s ease 0.1s';
+                footerContent.style.opacity = '1';
+                footerContent.style.transform = 'translateY(0)';
+                
+                setTimeout(() => {
+                    footer.style.height = '';
+                    footer.style.transition = '';
+                    footerContent.style.transition = '';
+                    footerContent.style.transform = '';
+                }, 300);
+                
+            }, 150);
+        }
+
+        function nextTask() {
+            const footer = document.getElementById('l-footer');
+            
+            if (currentLesson.isGenerator) {
+                const chaosLevel = parseInt(document.getElementById('chaos-level').value) || 2;
+                const newTasks = generateTasks(currentLesson, chaosLevel, 1);
+                currentLesson.tasks.push(newTasks[0]);
+            }
+            
+            if (currentTaskIndex + 1 < currentLesson.tasks.length) {
+                if (footer.classList.contains('state-success') || footer.classList.contains('state-error')) {
+                    animateFooterClose(() => {
+                        currentTaskIndex++;
+                        loadTask();
+                    });
+                } else {
+                    currentTaskIndex++;
+                    loadTask();
+                }
+            } else {
+                currentTaskIndex++;
+                showCompletionModal();
+            }
+        }
+
+        function retryTask() {
+            animateFooterClose(() => {
+                const lAnswer = document.getElementById('l-answer');
+                lAnswer.value = '';
+                lAnswer.disabled = false;
+                resetErrorState();
+                // Фокус убран, чтобы клавиатура не открывалась автоматически
+            });
+        }
+
+        function showExplanation() {
+            const footer = document.getElementById('l-footer');
+            const footerContent = footer.querySelector('.footer-content');
+            
+            // Плавное исчезновение старого контента
+            footerContent.style.transition = 'opacity 0.15s ease';
+            footerContent.style.opacity = '0';
+            
+            setTimeout(() => {
+                // Фиксируем текущую высоту для плавного старта
+                const startHeight = footer.offsetHeight;
+                footer.style.height = startHeight + 'px';
+                
+                // Force reflow
+                void footer.offsetHeight;
+                
+                footer.classList.add('explanation-mode'); // Добавляем класс, сохраняя state-success или state-error
+                
+                const feedbackTitle = document.getElementById('l-feedback-title');
+                // Сброс стилей на случай, если они остались от закрытия
+                feedbackTitle.style.transition = '';
+                feedbackTitle.style.opacity = '';
+                feedbackTitle.style.animation = '';
+                feedbackTitle.style.transform = '';
+                feedbackTitle.innerHTML = '💡 Объяснение';
+                
+                const task = currentLesson.tasks[currentTaskIndex];
+                const expContainer = document.getElementById('l-feedback-explanation');
+                expContainer.style.display = '';
+                expContainer.style.opacity = '';
+                expContainer.innerHTML = '';
+                
+                let fieldsArray = task.explanationFields || (task.explanation ? [task.explanation] : ["Объяснение отсутствует."]);
+                let delayCount = fieldsArray.length;
+                
+                fieldsArray.forEach((text, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'explanation-field';
+                    div.innerHTML = autoWrapMath(text); // Используем innerHTML для поддержки LaTeX
+                    div.style.animationDelay = `${index * 0.1}s`; // Плавное появление по очереди
+                    expContainer.appendChild(div);
+                });
+                
+                if (task.correctAnswer && task.correctAnswer.trim() !== "") {
+                    const div = document.createElement('div');
+                    div.className = 'explanation-field explanation-correct-answer';
+                    let ca = task.correctAnswer;
+                    if (!ca.includes('$') && !ca.includes('\\(') && !ca.includes('\\[')) {
+                        ca = `\\( ${ca} \\)`;
+                    }
+                    div.innerHTML = `Правильный ответ: ${ca}`;
+                    div.style.animationDelay = `${delayCount * 0.1}s`;
+                    expContainer.appendChild(div);
+                    delayCount++;
+                }
+                
+                // Рендерим MathJax для текста объяснения
+                if (window.MathJax) {
+                    MathJax.typesetPromise([expContainer]).catch((err) => console.log(err.message));
+                }
+                
+                document.getElementById('btn-next').classList.add('hidden');
+                document.getElementById('btn-retry').classList.add('hidden');
+                document.getElementById('btn-explain').classList.add('hidden');
+                
+                const btnCloseExplain = document.getElementById('btn-close-explain');
+                btnCloseExplain.classList.remove('hidden');
+                
+                // Сброс стилей кнопки
+                btnCloseExplain.style.display = '';
+                btnCloseExplain.style.opacity = '';
+                btnCloseExplain.style.transition = '';
+                btnCloseExplain.style.transform = '';
+                btnCloseExplain.style.animation = '';
+                
+                // Анимация вылета кнопки "Понятно"
+                btnCloseExplain.classList.remove('btn-animated');
+                void btnCloseExplain.offsetWidth; // trigger reflow
+                btnCloseExplain.classList.add('btn-animated');
+                btnCloseExplain.style.animationDelay = `${delayCount * 0.1}s`;
+                
+                // Запускаем анимацию высоты до 100vh и плавно показываем новый контент
+                footer.style.height = '100vh';
+                footerContent.style.opacity = '1';
+                
+                // После завершения анимации убираем жестко заданную высоту
+                setTimeout(() => {
+                    footer.style.height = '';
+                    footerContent.style.transition = '';
+                }, 400);
+            }, 150);
+        }
+
+        function closeExplanation() {
+            const footer = document.getElementById('l-footer');
+            const expContainer = document.getElementById('l-feedback-explanation');
+            const btnCloseExplain = document.getElementById('btn-close-explain');
+            const feedbackTitle = document.getElementById('l-feedback-title');
+            const footerContent = footer.querySelector('.footer-content');
+            
+            // 1. Фиксируем высоту футера, чтобы фон не двигался во время растворения элементов
+            footer.style.height = footer.offsetHeight + 'px';
+            
+            const fields = Array.from(expContainer.querySelectorAll('.explanation-field'));
+            
+            // Фиксируем текущее состояние элементов, убирая CSS-анимации
+            feedbackTitle.style.animation = 'none';
+            feedbackTitle.style.opacity = '1';
+            feedbackTitle.style.transform = 'translateY(0)';
+            
+            fields.forEach((field) => {
+                field.style.animation = 'none';
+                field.style.opacity = '1';
+                field.style.transform = 'translateY(0)';
+            });
+            
+            btnCloseExplain.style.animation = 'none';
+            btnCloseExplain.style.opacity = '1';
+            btnCloseExplain.style.transform = 'translateY(0)';
+            
+            // Force reflow чтобы браузер применил стили без анимаций
+            void footer.offsetHeight;
+            
+            // Задаем транзиции для плавного растворения (opacity)
+            feedbackTitle.style.transition = 'opacity 0.2s ease 0s';
+            feedbackTitle.style.opacity = '0';
+            
+            fields.forEach((field, index) => {
+                field.style.transition = `opacity 0.2s ease ${(index + 1) * 0.1}s`;
+                field.style.opacity = '0';
+            });
+            
+            btnCloseExplain.style.transition = `opacity 0.2s ease ${(fields.length + 1) * 0.1}s`;
+            btnCloseExplain.style.opacity = '0';
+            
+            const fadeOutTime = (fields.length + 1) * 100 + 200; // задержка последнего + длительность транзиции
+            
+            setTimeout(() => {
+                // 2. Элементы растворились на своем месте. Скрываем их полностью.
+                expContainer.style.display = 'none';
+                btnCloseExplain.style.display = 'none';
+                
+                // Убираем explanation-mode, чтобы узнать целевую высоту нормального футера
+                footer.classList.remove('explanation-mode');
+                
+                // Показываем нормальные кнопки скрытно (opacity 0), чтобы измерить высоту
+                const isSuccess = footer.classList.contains('state-success');
+                const isError = footer.classList.contains('state-error');
+                
+                if (isSuccess) {
+                    document.getElementById('btn-next').classList.remove('hidden');
+                    feedbackTitle.innerHTML = '<span>✔</span> Отлично!';
+                } else if (isError) {
+                    document.getElementById('btn-retry').classList.remove('hidden');
+                    feedbackTitle.innerHTML = '<span>✖</span> Неверно!';
+                }
+                document.getElementById('btn-explain').classList.remove('hidden');
+                
+                footerContent.style.opacity = '0'; // Прячем контент на время движения фона
+                
+                // Убираем жестко заданную высоту, чтобы измерить естественную высоту контента
+                const currentHeight = footer.style.height;
+                footer.style.height = '';
+                
+                // Измеряем целевую высоту
+                const targetHeight = footer.offsetHeight;
+                
+                // Возвращаем высоту для начала анимации
+                footer.style.height = currentHeight;
+                
+                // Возвращаем класс закрытия для анимации
+                footer.classList.add('explanation-closing');
+                
+                // Force reflow
+                void footer.offsetHeight;
+                
+                // 3. Запускаем движение фона вниз
+                footer.style.transition = 'height 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.1s ease';
+                footer.style.height = targetHeight + 'px';
+                
+                setTimeout(() => {
+                    // 4. Фон опустился. Очистка после анимации и показ нормального контента
+                    footer.classList.remove('explanation-closing');
+                    footer.style.height = '';
+                    footer.style.transition = ''; // Возвращаем стандартный transition из CSS
+                    
+                    // Сбрасываем стили элементов объяснения
+                    expContainer.innerHTML = '';
+                    expContainer.style.display = '';
+                    btnCloseExplain.style.display = '';
+                    btnCloseExplain.classList.add('hidden');
+                    
+                    feedbackTitle.style.transition = '';
+                    feedbackTitle.style.opacity = '';
+                    
+                    btnCloseExplain.style.transition = '';
+                    btnCloseExplain.style.opacity = '';
+                    btnCloseExplain.style.animation = '';
+                    btnCloseExplain.style.transform = '';
+                    
+                    // Плавно показываем нормальный контент
+                    void footerContent.offsetHeight; // reflow
+                    footerContent.style.transition = 'opacity 0.2s ease';
+                    footerContent.style.opacity = '1';
+                    
+                    setTimeout(() => {
+                        footerContent.style.transition = '';
+                    }, 200);
+                    
+                }, 400); // время движения фона
+                
+            }, fadeOutTime);
+        }
+
+        // Сброс красной ошибки при вводе
+        document.getElementById('l-answer').addEventListener('input', () => {
+            const footer = document.getElementById('l-footer');
+            if (footer.className.includes('state-error')) {
+                resetErrorState();
+            }
+        });
+
+        // Логика кастомной математической клавиатуры
+        let activeInputId = null;
+
+        function toggleMathKeyboard(inputId, event) {
+            if (event) event.preventDefault();
+            
+            const mf = document.getElementById(inputId);
+            
+            // Гарантируем, что родная клавиатура не появится
+            if (mf && mf.shadowRoot) {
+                const ta = mf.shadowRoot.querySelector('textarea');
+                if (ta) {
+                    ta.setAttribute('inputmode', 'none');
+                }
+            }
+
+            const kb = document.getElementById('math-keyboard');
+            if (activeInputId === inputId && kb.classList.contains('visible')) {
+                // Если кликнули по тому же полю, просто оставляем клавиатуру открытой
+            } else {
+                activeInputId = inputId;
+                kb.classList.add('visible');
+                document.body.classList.add('keyboard-open');
+                const csWrapper = document.getElementById('cheat-sheet-wrapper');
+                if (csWrapper) csWrapper.style.bottom = '380px'; // Поднимаем над клавиатурой
+                
+                // Поднимаем контент (чтобы можно было прокрутить до поля ввода), но футер оставляем внизу
+                const content = document.getElementById('l-main');
+                const kbHeight = kb.offsetHeight || 320; // Высота новой большой клавиатуры
+                content.style.paddingBottom = `${kbHeight + 20}px`;
+                
+                // Перемещаем футер в main, чтобы он скроллился вместе с контентом
+                const footer = document.getElementById('l-footer');
+                content.appendChild(footer);
+                footer.style.position = 'relative';
+                footer.style.bottom = 'auto';
+                footer.style.zIndex = '10';
+                footer.style.width = 'auto';
+                footer.style.marginLeft = '-20px';
+                footer.style.marginRight = '-20px';
+                footer.style.flexShrink = '0';
+                
+                setTimeout(() => {
+                    const mfRect = mf.getBoundingClientRect();
+                    const contentRect = content.getBoundingClientRect();
+                    
+                    // Вычисляем видимую область контента над клавиатурой
+                    const visibleTop = contentRect.top;
+                    const visibleBottom = window.innerHeight - kbHeight;
+                    const visibleCenter = visibleTop + (visibleBottom - visibleTop) / 2;
+                    
+                    // Текущий центр поля ввода
+                    const mfCenter = mfRect.top + mfRect.height / 2;
+                    
+                    // На сколько нужно проскроллить
+                    const scrollAmount = mfCenter - visibleCenter;
+                    
+                    content.scrollBy({
+                        top: scrollAmount,
+                        behavior: 'smooth'
+                    });
+                }, 100);
+            }
+        }
+
+        function closeMathKeyboard() {
+            if (!activeInputId) return; // Если уже закрыта, ничего не делаем (чтобы не сбивать фокус родной клавиатуры)
+            
+            const kb = document.getElementById('math-keyboard');
+            kb.classList.remove('visible');
+            
+            const activeEl = document.activeElement;
+            const isNativeInputFocused = activeEl && activeEl.tagName === 'INPUT' && (activeEl.type === 'text' || activeEl.type === 'number');
+            if (!isNativeInputFocused) {
+                document.body.classList.remove('keyboard-open');
+            }
+            
+            const csWrapper = document.getElementById('cheat-sheet-wrapper');
+            if (csWrapper) csWrapper.style.bottom = '100px'; // Возвращаем на место
+            activeInputId = null;
+            
+            const content = document.getElementById('l-main');
+            content.style.paddingBottom = '150px';
+            
+            // Возвращаем футер на место
+            const footer = document.getElementById('l-footer');
+            document.getElementById('lesson-view').appendChild(footer);
+            footer.style.position = '';
+            footer.style.bottom = '';
+            footer.style.zIndex = '';
+            footer.style.width = '';
+            footer.style.marginLeft = '';
+            footer.style.marginRight = '';
+            footer.style.flexShrink = '';
+        }
+
+        function insertMath(text, cursorOffset = 0) {
+            if (!activeInputId) return;
+            const mf = document.getElementById(activeInputId);
+            
+            if (text === 'Backspace') mf.executeCommand(['deleteBackward']);
+            else if (text === 'Left') mf.executeCommand(['moveToPreviousChar']);
+            else if (text === 'Right') mf.executeCommand(['moveToNextChar']);
+            else if (text === '/') mf.executeCommand(['insert', '\\frac{#0}{#?}']);
+            else if (text === '*') mf.executeCommand(['insert', '\\cdot']);
+            else if (text === '^') mf.executeCommand(['insert', '^{#?}']);
+            else if (text === '_') mf.executeCommand(['insert', '_{#?}']);
+            else if (text === '√') mf.executeCommand(['insert', '\\sqrt{#?}']);
+            else if (text === 'Enter') {
+                const oldVal = mf.value;
+                
+                // Считаем количество \\ внутри всех cases ДО вставки
+                const countSlashesInCases = (val) => {
+                    let count = 0;
+                    const matches = val.match(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g);
+                    if (matches) {
+                        for (const match of matches) {
+                            const slashes = match.match(/\\\\/g);
+                            if (slashes) count += slashes.length;
+                        }
+                    }
+                    return count;
+                };
+                
+                const oldSlashesCount = countSlashesInCases(oldVal);
+                
+                mf.executeCommand(['insert', '\\\\']);
+                
+                const newSlashesCount = countSlashesInCases(mf.value);
+                
+                // Если количество \\ внутри cases увеличилось, значит мы добавили строку в cases
+                // В 9 классе cases всегда на 2 строки (1 слеш). Мы не даем добавлять новые строки.
+                if (newSlashesCount > oldSlashesCount) {
+                    mf.value = oldVal;
+                    
+                    const getCursorPos = () => {
+                        try { return mf.selection ? JSON.stringify(mf.selection) : mf.position; } 
+                        catch(e) { return null; }
+                    };
+                    
+                    const oldPos = getCursorPos();
+                    mf.executeCommand(['moveDown']);
+                    const newPos = getCursorPos();
+                    
+                    if (oldPos !== null && oldPos === newPos) {
+                        mf.executeCommand(['moveToNextChar']);
+                        mf.executeCommand(['insert', '\\\\']);
+                    }
+                }
+            }
+            else if (text === '()') mf.executeCommand(['insert', '\\left(#?\\right)']);
+            else if (text === '{}') mf.executeCommand(['insert', '\\left\\{#?\\right\\}']);
+            else if (text === '[]') mf.executeCommand(['insert', '\\left[#?\\right]']);
+            else if (text === '[') mf.executeCommand(['insert', '[']);
+            else if (text === ']') mf.executeCommand(['insert', ']']);
+            else if (text === '÷') mf.executeCommand(['insert', '\\div']);
+            else if (text === '|x|') mf.executeCommand(['insert', '\\left|#?\\right|']);
+            else if (text === '|') mf.executeCommand(['insert', '\\mid']);
+            else if (text === 'cases') mf.executeCommand(['insert', '\\begin{cases} #? \\\\ #? \\end{cases}']);
+            else if (text === '≠') mf.executeCommand(['insert', '\\neq']);
+            else if (text === '≈') mf.executeCommand(['insert', '\\approx']);
+            else if (text === '±') mf.executeCommand(['insert', '\\pm']);
+            else if (text === '∞') mf.executeCommand(['insert', '\\infty']);
+            else if (text === '∈') mf.executeCommand(['insert', '\\in']);
+            else if (text === '∪') mf.executeCommand(['insert', '\\cup']);
+            else if (text === 'f(x)') mf.executeCommand(['insert', 'f(x)']);
+            else if (text === 'D(f)') mf.executeCommand(['insert', 'D(f)']);
+            else if (text === 'E(f)') mf.executeCommand(['insert', 'E(f)']);
+            else mf.executeCommand(['insert', text]);
+            
+            mf.dispatchEvent(new Event('input'));
+        }
+
+        // Инициализация MathLive и блокировка родной клавиатуры
+        customElements.whenDefined('math-field').then(() => {
+            document.querySelectorAll('math-field').forEach(mf => {
+                mf.menuItems = [];
+                
+                // Функция для жесткого отключения родной клавиатуры
+                const disableNativeKeyboard = () => {
+                    if (mf.shadowRoot) {
+                        const ta = mf.shadowRoot.querySelector('textarea');
+                        if (ta) {
+                            ta.setAttribute('inputmode', 'none');
+                        }
+                    }
+                };
+
+                // Открываем нашу клавиатуру при клике (чтобы не открывалась при скролле)
+                mf.addEventListener('click', () => {
+                    disableNativeKeyboard();
+                    toggleMathKeyboard(mf.id);
+                });
+
+                mf.addEventListener('touchstart', disableNativeKeyboard, { passive: true });
+            });
+        });
+
+        // Закрытие клавиатуры при клике вне её области
+        const closeKeyboardOnOutsideClick = (e) => {
+            const kb = document.getElementById('math-keyboard');
+            if (kb && kb.classList.contains('visible')) {
+                // Проверяем, что клик был не по клавиатуре и не по полю ввода
+                if (!e.target.closest('#math-keyboard') && !e.target.closest('math-field')) {
+                    closeMathKeyboard();
+                }
+            }
+        };
+        // Используем click вместо mousedown/touchstart, чтобы клавиатура не закрывалась при скролле (свайпе)
+        document.addEventListener('click', closeKeyboardOnOutsideClick);
+
+        // Логика зажатия для попапов
+        window.isLongPress = false;
+        let pressTimer = null;
+        let activePopup = null;
+
+        const removePopup = () => {
+            if (activePopup) {
+                activePopup.remove();
+                activePopup = null;
+            }
+        };
+
+        // Закрытие попапа при клике вне его
+        document.addEventListener('click', (e) => {
+            if (activePopup && !e.target.closest('.math-key-popup')) {
+                removePopup();
+            }
+        }, { capture: true });
+
+        const handleEnd = () => {
+            clearTimeout(pressTimer);
+            // Мы больше не вставляем символ при отпускании, если это не клик по кнопке попапа
+        };
+
+        document.addEventListener('touchend', handleEnd);
+        document.addEventListener('mouseup', handleEnd);
+
+        document.querySelectorAll('.math-key').forEach(key => {
+            const startPress = (e) => {
+                // Игнорируем, если клик был по уже открытому попапу
+                if (e.target.closest('.math-key-popup')) return;
+
+                window.isLongPress = false;
+                if (key.classList.contains('has-popup')) {
+                    pressTimer = setTimeout(() => {
+                        window.isLongPress = true;
+                        const popupData = key.getAttribute('data-popup');
+                        if (!popupData) return;
+                        
+                        const items = popupData.split(',');
+                        if (items.length === 1) {
+                            insertMath(items[0]);
+                            key.style.background = '#d1d1d6';
+                            setTimeout(() => key.style.background = '', 150);
+                        } else {
+                            removePopup();
+                            const popup = document.createElement('div');
+                            popup.className = 'math-key-popup';
+                            items.forEach(item => {
+                                const btn = document.createElement('div');
+                                btn.className = 'math-popup-btn';
+                                btn.innerText = item;
+                                
+                                // Обработчик клика по кнопке попапа
+                                const insertItem = (ev) => {
+                                    ev.preventDefault();
+                                    ev.stopPropagation();
+                                    insertMath(item);
+                                    removePopup();
+                                };
+                                btn.addEventListener('mousedown', insertItem);
+                                btn.addEventListener('touchstart', insertItem, {passive: false});
+                                
+                                popup.appendChild(btn);
+                            });
+                            key.appendChild(popup);
+                            activePopup = popup;
+                        }
+                    }, 300);
+                }
+            };
+
+            key.addEventListener('touchstart', startPress, {passive: true});
+            key.addEventListener('mousedown', startPress);
+
+            key.addEventListener('touchmove', () => {
+                if (!activePopup) clearTimeout(pressTimer);
+            }, {passive: true});
+            
+            key.addEventListener('mouseleave', () => {
+                if (!activePopup) clearTimeout(pressTimer);
+            });
+        });
+
+        function handleKeyClick(e, val) {
+            if (window.isLongPress) {
+                window.isLongPress = false;
+                return;
+            }
+            insertMath(val);
+        }
+
+        // Отслеживание открытия клавиатуры
+        document.addEventListener('focusin', (e) => {
+            if (e.target.tagName === 'INPUT' && (e.target.type === 'text' || e.target.type === 'number')) {
+                document.body.classList.add('keyboard-open');
+            }
+        });
+        document.addEventListener('focusout', (e) => {
+            if (e.target.tagName === 'INPUT' && (e.target.type === 'text' || e.target.type === 'number')) {
+                setTimeout(() => {
+                    const kb = document.getElementById('math-keyboard');
+                    const activeEl = document.activeElement;
+                    const isNativeInputFocused = activeEl && activeEl.tagName === 'INPUT' && (activeEl.type === 'text' || activeEl.type === 'number');
+                    if (!isNativeInputFocused && (!kb || !kb.classList.contains('visible'))) {
+                        document.body.classList.remove('keyboard-open');
+                    }
+                }, 50);
+            }
+        });
