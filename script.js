@@ -22,7 +22,7 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/cheatsheets.json"
         // ===================================================
         const CHEAT_SHEET_URLS = [
-            // Сюда добавьте ссылку на ваш отдельный JSON файл со шпаргалками
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/hpargalka.json"
         ];
 
         async function loadCourseData() {
