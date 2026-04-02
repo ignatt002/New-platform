@@ -1144,7 +1144,7 @@
         }
 
         function goToReportForm() {
-            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
+            window.open('https://forms.gle/LyhjLNYT6k7u6VYb9', '_blank');
             closeReportModal();
         }
 
