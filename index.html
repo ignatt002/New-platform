@@ -172,7 +172,8 @@
 
     <!-- Математическая клавиатура -->
     <div id="math-keyboard">
-        <div class="math-keyboard-grid">
+<div class="math-keyboard-grid">
+            <!-- Ряд 1 -->
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '1')">1</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '2')">2</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '3')">3</button>
@@ -180,6 +181,7 @@
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '-')">-</button>
             <button class="math-key action-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'Backspace')">⌫</button>
 
+            <!-- Ряд 2 -->
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '4')">4</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '5')">5</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '6')">6</button>
@@ -192,6 +194,7 @@
                 </div>
             </button>
 
+            <!-- Ряд 3 -->
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '7')">7</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '8')">8</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '9')">9</button>
@@ -199,6 +202,7 @@
             <button class="math-key has-popup" data-base="<" data-popup="≤" data-hint="≤" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '<')">&lt;</button>
             <button class="math-key has-popup" data-base=">" data-popup="≥" data-hint="≥" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '>')">&gt;</button>
 
+            <!-- Ряд 4 -->
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '0')">0</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '.')">,</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'x')">x</button>
@@ -206,30 +210,27 @@
             <button class="math-key action-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'Left')">←</button>
             <button class="math-key action-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'Right')">→</button>
 
+            <!-- Ряд 5 -->
             <button class="math-key has-popup" data-base="(" data-popup="[" data-hint="[" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '(')">(</button>
             <button class="math-key has-popup" data-base=")" data-popup="]" data-hint="]" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, ')')">)</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '√')">√</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '^')">xⁿ</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '∞')">∞</button>
-            <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, ';')">;</button>
             <button class="math-key action-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'Enter')">↵</button>
 
+            <!-- Ряд 6 (тут теперь обычная скобка { ) -->
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, 'f(x)')">f(x)</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '±')">±</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '|x|')">|x|</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '|')">|</button>
             <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '_')">xᵢ</button>
-            <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '{')">
-    <div style="display: flex; align-items: center; font-size: 24px;">{</div>
-</button>
+            <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '{')">{</button>
 
-
-                <div style="display: flex; align-items: center; font-size: 24px;">{</div>
-            </button>
-
+            <!-- Ряд 7 (сюда я перенес точку с запятой) -->
             <button class="math-key has-popup" data-base="∈" data-popup="∪,∩" data-hint="∪ ∩" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, '∈')">∈</button>
+            <button class="math-key" onmousedown="event.preventDefault()" onclick="handleKeyClick(event, ';')">;</button>
             <button class="math-key action-key" style="grid-column: span 4;" onmousedown="event.preventDefault()" onclick="closeMathKeyboard()">Готово</button>
-        </div>
+</div>
     </div>
 
     <!-- Модальные окна -->
