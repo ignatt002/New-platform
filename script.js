@@ -765,6 +765,9 @@
             startBtn.style.boxShadow = `0 4px 0 ${darkenColor(topicColor, 20)}`;
             
             startBtn.onclick = () => {
+                const popup = document.getElementById('lesson-popup');
+                if (popup.classList.contains('popup-hidden')) return;
+                
             	hideLessonPopupVisuals();
                 if (currentAppState === 'path_popup') {
                     history.back(); // Pop the path_popup state
@@ -1299,10 +1302,12 @@
         }
 
         function closeTheory() {
+            const theoryView = document.getElementById('theory-view');
+            if (!theoryView.classList.contains('active')) return;
+            
+            theoryView.classList.remove('active');
             if (currentAppState === 'theory') {
                 history.back();
-            } else {
-                document.getElementById('theory-view').classList.remove('active');
             }
         }
 
@@ -1319,10 +1324,9 @@
                     currentAppState = 'lesson_dropdown';
                 }
             } else {
+                dropdown.classList.add('hidden');
                 if (currentAppState === 'lesson_dropdown') {
                     history.back();
-                } else {
-                    dropdown.classList.add('hidden');
                 }
             }
         }
@@ -1331,10 +1335,9 @@
             const dropdown = document.getElementById('lesson-dropdown');
             const menuBtn = document.querySelector('.lesson-menu-btn');
             if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && e.target !== menuBtn) {
+                dropdown.classList.add('hidden');
                 if (currentAppState === 'lesson_dropdown') {
                     history.back();
-                } else {
-                    dropdown.classList.add('hidden');
                 }
             }
         });
@@ -1351,10 +1354,12 @@
         }
 
         function closeReportModal() {
+            const overlay = document.getElementById('report-modal-overlay');
+            if (overlay.classList.contains('hidden')) return;
+            
+            overlay.classList.add('hidden');
             if (currentAppState === 'report_modal') {
                 history.back();
-            } else {
-                document.getElementById('report-modal-overlay').classList.add('hidden');
             }
         }
 
@@ -1911,10 +1916,9 @@
         function closeMathKeyboard() {
             if (!activeInputId) return; // Если уже закрыта, ничего не делаем
             
+            closeMathKeyboardVisuals();
             if (currentAppState === 'math_keyboard') {
                 history.back();
-            } else {
-                closeMathKeyboardVisuals();
             }
         }
 
