@@ -484,6 +484,7 @@
 
         let currentAppState = 'topics';
         let lessonCompleted = false;
+        let isProgrammaticBack = false;
 
         window.addEventListener('load', () => {
             if (!history.state) {
@@ -496,41 +497,63 @@
         window.addEventListener('popstate', (event) => {
             const targetPage = event.state ? event.state.page : 'topics';
 
-            if (currentAppState === 'exit_modal' && targetPage === 'lesson') {
+            // 1. Path Popup (Map circles)
+            if (currentAppState === 'path_popup' && targetPage === 'path') {
+                hideLessonPopupVisuals();
+                currentAppState = 'path';
+            }
+            // 2. Theory Modals
+            else if (currentAppState === 'theory' && (targetPage === 'path' || targetPage === 'lesson')) {
+                document.getElementById('theory-view').classList.remove('active');
+                currentAppState = targetPage;
+            }
+            // 3. Exit Modal (from Lesson X button)
+            else if (currentAppState === 'exit_modal' && targetPage === 'lesson') {
                 hideExitModalVisuals();
                 currentAppState = 'lesson';
             }
+            // 4. Exit Modal (from Hardware Back button in Lesson)
+            else if (currentAppState === 'exit_modal' && targetPage === 'path') {
+                if (isProgrammaticBack) {
+                    isProgrammaticBack = false;
+                    actuallyCloseLesson();
+                    currentAppState = 'path';
+                } else {
+                    // User pressed hardware back to dismiss modal.
+                    hideExitModalVisuals();
+                    history.pushState({ page: 'lesson' }, '');
+                    currentAppState = 'lesson';
+                }
+            }
+            // 5. Lesson -> Path (Hardware Back)
             else if (currentAppState === 'lesson' && targetPage === 'path') {
                 if (lessonCompleted) {
                     actuallyCloseLesson();
                     currentAppState = 'path';
                 } else {
-                    history.pushState({ page: 'lesson' }, '');
-                    history.pushState({ page: 'exit_modal' }, '');
+                    // Show exit modal instead of leaving
+                    history.pushState({ page: 'exit_modal', from: 'path' }, '');
                     showExitModalVisuals();
                     currentAppState = 'exit_modal';
                 }
             }
-            else if (currentAppState === 'exit_modal' && targetPage === 'path') {
-                hideExitModalVisuals();
-                setTimeout(() => {
-                    actuallyCloseLesson();
-                }, 300);
-                currentAppState = 'path';
-            }
+            // 6. Path -> Topics
             else if (currentAppState === 'path' && targetPage === 'topics') {
                 navigateMenu('page-topics', true);
                 currentAppState = 'topics';
             }
+            // Fallbacks
             else if (targetPage === 'path') {
                 navigateMenu('page-path', true);
                 currentAppState = 'path';
             }
             else if (targetPage === 'topics') {
-                if (currentAppState === 'lesson' || currentAppState === 'exit_modal') {
-                    if (currentAppState === 'exit_modal') hideExitModalVisuals();
+                if (currentAppState === 'lesson' || currentAppState === 'exit_modal' || currentAppState === 'theory') {
+                    hideExitModalVisuals();
+                    document.getElementById('theory-view').classList.remove('active');
                     actuallyCloseLesson();
-                } else if (currentAppState === 'path') {
+                } else if (currentAppState === 'path' || currentAppState === 'path_popup') {
+                    hideLessonPopupVisuals();
                     navigateMenu('page-topics', true);
                 }
                 currentAppState = 'topics';
@@ -711,8 +734,15 @@
             startBtn.style.boxShadow = `0 4px 0 ${darkenColor(topicColor, 20)}`;
             
             startBtn.onclick = () => {
-                popup.classList.add('popup-hidden');
-                startLesson(lessonId);
+            	hideLessonPopupVisuals();
+                if (currentAppState === 'path_popup') {
+                    history.back(); // Pop the path_popup state
+                    setTimeout(() => {
+                        startLesson(lessonId);
+                    }, 10);
+                } else {
+                    startLesson(lessonId);
+                }
             };
 
             // Позиционируем попап над кнопкой
@@ -728,13 +758,28 @@
             
             popup.classList.remove('popup-hidden');
             activeLessonPopup = popup;
+
+            if (currentAppState !== 'path_popup') {
+                history.pushState({ page: 'path_popup' }, '');
+                currentAppState = 'path_popup';
+            }
+        }
+
+        function hideLessonPopupVisuals() {
+            const popup = document.getElementById('lesson-popup');
+            if (popup && !popup.classList.contains('popup-hidden')) {
+                popup.classList.add('popup-hidden');
+            }
         }
 
         // Закрытие попапа при клике вне его
         document.addEventListener('click', (e) => {
             const popup = document.getElementById('lesson-popup');
             if (popup && !popup.classList.contains('popup-hidden') && !popup.contains(e.target)) {
-                popup.classList.add('popup-hidden');
+                hideLessonPopupVisuals();
+                if (currentAppState === 'path_popup') {
+                    history.back();
+                }
             }
         });
 
@@ -1030,7 +1075,7 @@
         }
 
         function confirmCloseLesson() {
-            history.pushState({ page: 'exit_modal' }, '');
+            history.pushState({ page: 'exit_modal', from: 'lesson' }, '');
             currentAppState = 'exit_modal';
             showExitModalVisuals();
         }
@@ -1045,7 +1090,13 @@
 
         function confirmExitYes() {
             if (currentAppState === 'exit_modal') {
-                history.go(-2);
+                isProgrammaticBack = true;
+                const stateFrom = history.state ? history.state.from : null;
+                if (stateFrom === 'lesson') {
+                    history.go(-2);
+                } else {
+                    history.back();
+                }
             } else {
                 hideExitModalVisuals();
                 setTimeout(() => {
@@ -1155,6 +1206,11 @@
             
             document.getElementById('theory-view').classList.add('active');
             
+            if (currentAppState !== 'theory') {
+                history.pushState({ page: 'theory' }, '');
+                currentAppState = 'theory';
+            }
+            
             if (window.MathJax) {
                 MathJax.typesetPromise([document.getElementById('t-example-bubble')]).catch((err) => console.log(err.message));
             }
@@ -1204,10 +1260,19 @@
             }
             
             document.getElementById('theory-view').classList.add('active');
+            
+            if (currentAppState !== 'theory') {
+                history.pushState({ page: 'theory' }, '');
+                currentAppState = 'theory';
+            }
         }
 
         function closeTheory() {
-            document.getElementById('theory-view').classList.remove('active');
+            if (currentAppState === 'theory') {
+                history.back();
+            } else {
+                document.getElementById('theory-view').classList.remove('active');
+            }
         }
 
         function toggleLessonMenu() {
