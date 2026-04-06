@@ -516,7 +516,10 @@
             else if (currentAppState === 'exit_modal' && targetPage === 'path') {
                 if (isProgrammaticBack) {
                     isProgrammaticBack = false;
-                    actuallyCloseLesson();
+                    hideExitModalVisuals();
+                    setTimeout(() => {
+                        actuallyCloseLesson();
+                    }, 300);
                     currentAppState = 'path';
                 } else {
                     // User pressed hardware back to dismiss modal.
