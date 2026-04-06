@@ -482,9 +482,95 @@
             document.addEventListener('touchstart', closePopup, {passive: false});
         }
 
+        let currentAppState = 'topics';
+        let lessonCompleted = false;
+
+        window.addEventListener('load', () => {
+            if (!history.state) {
+                history.replaceState({ page: 'topics' }, '');
+            } else {
+                currentAppState = history.state.page || 'topics';
+            }
+        });
+
+        window.addEventListener('popstate', (event) => {
+            const targetPage = event.state ? event.state.page : 'topics';
+
+            if (currentAppState === 'exit_modal' && targetPage === 'lesson') {
+                hideExitModalVisuals();
+                currentAppState = 'lesson';
+            }
+            else if (currentAppState === 'lesson' && targetPage === 'path') {
+                if (lessonCompleted) {
+                    actuallyCloseLesson();
+                    currentAppState = 'path';
+                } else {
+                    history.pushState({ page: 'lesson' }, '');
+                    history.pushState({ page: 'exit_modal' }, '');
+                    showExitModalVisuals();
+                    currentAppState = 'exit_modal';
+                }
+            }
+            else if (currentAppState === 'exit_modal' && targetPage === 'path') {
+                hideExitModalVisuals();
+                setTimeout(() => {
+                    actuallyCloseLesson();
+                }, 300);
+                currentAppState = 'path';
+            }
+            else if (currentAppState === 'path' && targetPage === 'topics') {
+                navigateMenu('page-topics', true);
+                currentAppState = 'topics';
+            }
+            else if (targetPage === 'path') {
+                navigateMenu('page-path', true);
+                currentAppState = 'path';
+            }
+            else if (targetPage === 'topics') {
+                if (currentAppState === 'lesson' || currentAppState === 'exit_modal') {
+                    if (currentAppState === 'exit_modal') hideExitModalVisuals();
+                    actuallyCloseLesson();
+                } else if (currentAppState === 'path') {
+                    navigateMenu('page-topics', true);
+                }
+                currentAppState = 'topics';
+            }
+        });
+
+        function showExitModalVisuals() {
+            const overlay = document.getElementById('exit-confirm-overlay');
+            const content = document.getElementById('exit-confirm-content');
+            if(overlay && content) {
+                overlay.classList.remove('hidden');
+                void overlay.offsetWidth;
+                overlay.style.opacity = '1';
+                content.style.transform = 'translateY(0)';
+            }
+        }
+
+        function hideExitModalVisuals() {
+            const overlay = document.getElementById('exit-confirm-overlay');
+            const content = document.getElementById('exit-confirm-content');
+            if(overlay && content) {
+                overlay.style.opacity = '0';
+                content.style.transform = 'translateY(100%)';
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 300);
+            }
+        }
+
         let isNavigating = false;
-        function navigateMenu(targetPageId) {
+        function navigateMenu(targetPageId, fromPopState = false) {
             if (isNavigating) return;
+            
+            if (!fromPopState) {
+                const page = targetPageId === 'page-path' ? 'path' : 'topics';
+                if (currentAppState !== page) {
+                    history.pushState({ page: page }, '');
+                    currentAppState = page;
+                }
+            }
             
             const currentId = targetPageId === 'page-path' ? 'page-topics' : 'page-path';
             const current = document.getElementById(currentId);
@@ -653,6 +739,9 @@
         });
 
         function startLesson(lessonId) {
+            lessonCompleted = false;
+            history.pushState({ page: 'lesson' }, '');
+            currentAppState = 'lesson';
             lessonStartTime = Date.now();
             lessonErrors = 0;
             currentLessonId = lessonId;
@@ -941,32 +1030,32 @@
         }
 
         function confirmCloseLesson() {
-            const overlay = document.getElementById('exit-confirm-overlay');
-            const content = document.getElementById('exit-confirm-content');
-            overlay.classList.remove('hidden');
-            void overlay.offsetWidth;
-            overlay.style.opacity = '1';
-            content.style.transform = 'translateY(0)';
+            history.pushState({ page: 'exit_modal' }, '');
+            currentAppState = 'exit_modal';
+            showExitModalVisuals();
         }
 
         function closeExitConfirmModal() {
-            const overlay = document.getElementById('exit-confirm-overlay');
-            const content = document.getElementById('exit-confirm-content');
-            overlay.style.opacity = '0';
-            content.style.transform = 'translateY(100%)';
-            setTimeout(() => {
-                overlay.classList.add('hidden');
-            }, 300);
+            if (currentAppState === 'exit_modal') {
+                history.back();
+            } else {
+                hideExitModalVisuals();
+            }
         }
 
         function confirmExitYes() {
-            closeExitConfirmModal();
-            setTimeout(() => {
-                actuallyCloseLesson();
-            }, 300);
+            if (currentAppState === 'exit_modal') {
+                history.go(-2);
+            } else {
+                hideExitModalVisuals();
+                setTimeout(() => {
+                    actuallyCloseLesson();
+                }, 300);
+            }
         }
 
         function showCompletionModal() {
+            lessonCompleted = true;
             const timeSpent = Math.floor((Date.now() - lessonStartTime) / 1000);
             const minutes = Math.floor(timeSpent / 60);
             const seconds = timeSpent % 60;
@@ -991,7 +1080,11 @@
             content.style.transform = 'scale(0.9)';
             setTimeout(() => {
                 overlay.classList.add('hidden');
-                actuallyCloseLesson();
+                if (currentAppState === 'lesson') {
+                    history.back();
+                } else {
+                    actuallyCloseLesson();
+                }
             }, 300);
         }
 
