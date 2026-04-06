@@ -1,4 +1,4 @@
-        /* ===================================================
+/* ===================================================
            КОНСТРУКТОР КУРСА (БАЗА ДАННЫХ)
            Здесь вы можете легко добавлять темы, кругляшки и уроки!
            =================================================== */
@@ -530,6 +530,7 @@
 
         let currentTopicId = null;
         let currentSubtopicIndex = null;
+        let savedPathScrollPosition = 0;
 
         function openTopic(topicId, subtopicIndex) {
             currentTopicId = topicId;
@@ -738,6 +739,8 @@
 
             currentTaskIndex = 0;
             loadTask();
+
+            savedPathScrollPosition = window.scrollY || document.documentElement.scrollTop;
 
             const menuView = document.getElementById('menu-view');
             const lessonView = document.getElementById('lesson-view');
@@ -1006,7 +1009,7 @@
                 
                 menuView.classList.remove('hidden');
                 menuView.style.animation = 'viewFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
-                window.scrollTo(0, 0);
+                window.scrollTo(0, savedPathScrollPosition);
             }, 250);
         }
 
@@ -1145,7 +1148,7 @@
         }
 
         function goToReportForm() {
-            window.open('https://forms.gle/LyhjLNYT6k7u6VYb9', '_blank');
+            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
             closeReportModal();
         }
 
@@ -1791,6 +1794,7 @@
             else if (text === 'f(x)') mf.executeCommand(['insert', 'f(x)']);
             else if (text === 'D(f)') mf.executeCommand(['insert', 'D(f)']);
             else if (text === 'E(f)') mf.executeCommand(['insert', 'E(f)']);
+            else if (text === ';') mf.executeCommand(['insert', ';']);
             else mf.executeCommand(['insert', text]);
             
             mf.dispatchEvent(new Event('input'));
