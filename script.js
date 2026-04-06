@@ -537,7 +537,23 @@
                     currentAppState = 'exit_modal';
                 }
             }
-            // 6. Path -> Topics
+            // 6. Math Keyboard
+            else if (currentAppState === 'math_keyboard' && targetPage === 'lesson') {
+                closeMathKeyboardVisuals();
+                currentAppState = 'lesson';
+            }
+            // 7. Lesson Dropdown
+            else if (currentAppState === 'lesson_dropdown' && targetPage === 'lesson') {
+                document.getElementById('lesson-dropdown').classList.add('hidden');
+                currentAppState = 'lesson';
+            }
+            // 8. Report Modal
+            else if (currentAppState === 'report_modal' && targetPage === 'lesson_dropdown') {
+                document.getElementById('report-modal-overlay').classList.add('hidden');
+                document.getElementById('lesson-dropdown').classList.remove('hidden');
+                currentAppState = 'lesson_dropdown';
+            }
+            // 9. Path -> Topics
             else if (currentAppState === 'path' && targetPage === 'topics') {
                 navigateMenu('page-topics', true);
                 currentAppState = 'topics';
@@ -548,9 +564,12 @@
                 currentAppState = 'path';
             }
             else if (targetPage === 'topics') {
-                if (currentAppState === 'lesson' || currentAppState === 'exit_modal' || currentAppState === 'theory') {
+                if (currentAppState === 'lesson' || currentAppState === 'exit_modal' || currentAppState === 'theory' || currentAppState === 'math_keyboard' || currentAppState === 'lesson_dropdown' || currentAppState === 'report_modal') {
                     hideExitModalVisuals();
                     document.getElementById('theory-view').classList.remove('active');
+                    document.getElementById('lesson-dropdown').classList.add('hidden');
+                    document.getElementById('report-modal-overlay').classList.add('hidden');
+                    closeMathKeyboardVisuals();
                     actuallyCloseLesson();
                 } else if (currentAppState === 'path' || currentAppState === 'path_popup') {
                     hideLessonPopupVisuals();
@@ -582,6 +601,15 @@
                 }, 300);
             }
         }
+
+        // Close exit modal on overlay click
+        document.addEventListener('click', (e) => {
+            const overlay = document.getElementById('exit-confirm-overlay');
+            const content = document.getElementById('exit-confirm-content');
+            if (overlay && !overlay.classList.contains('hidden') && e.target === overlay) {
+                closeExitConfirmModal();
+            }
+        });
 
         let isNavigating = false;
         function navigateMenu(targetPageId, fromPopState = false) {
@@ -1282,8 +1310,17 @@
                 document.getElementById('ld-progress').innerText = currentLesson.isGenerator ? `Задание ${currentTaskIndex + 1}` : `Задание ${currentTaskIndex + 1} из ${currentLesson.tasks.length}`;
                 document.getElementById('ld-code').innerText = currentLessonId;
                 dropdown.classList.remove('hidden');
+                
+                if (currentAppState !== 'lesson_dropdown') {
+                    history.pushState({ page: 'lesson_dropdown' }, '');
+                    currentAppState = 'lesson_dropdown';
+                }
             } else {
-                dropdown.classList.add('hidden');
+                if (currentAppState === 'lesson_dropdown') {
+                    history.back();
+                } else {
+                    dropdown.classList.add('hidden');
+                }
             }
         }
 
@@ -1291,7 +1328,11 @@
             const dropdown = document.getElementById('lesson-dropdown');
             const menuBtn = document.querySelector('.lesson-menu-btn');
             if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && e.target !== menuBtn) {
-                dropdown.classList.add('hidden');
+                if (currentAppState === 'lesson_dropdown') {
+                    history.back();
+                } else {
+                    dropdown.classList.add('hidden');
+                }
             }
         });
 
@@ -1299,10 +1340,19 @@
             document.getElementById('lesson-dropdown').classList.add('hidden');
             document.getElementById('report-lesson-code').innerText = currentLessonId;
             document.getElementById('report-modal-overlay').classList.remove('hidden');
+            
+            if (currentAppState !== 'report_modal') {
+                history.pushState({ page: 'report_modal' }, '');
+                currentAppState = 'report_modal';
+            }
         }
 
         function closeReportModal() {
-            document.getElementById('report-modal-overlay').classList.add('hidden');
+            if (currentAppState === 'report_modal') {
+                history.back();
+            } else {
+                document.getElementById('report-modal-overlay').classList.add('hidden');
+            }
         }
 
         function goToReportForm() {
@@ -1807,6 +1857,12 @@
                 activeInputId = inputId;
                 kb.classList.add('visible');
                 document.body.classList.add('keyboard-open');
+                
+                if (currentAppState !== 'math_keyboard') {
+                    history.pushState({ page: 'math_keyboard' }, '');
+                    currentAppState = 'math_keyboard';
+                }
+                
                 const csWrapper = document.getElementById('cheat-sheet-wrapper');
                 if (csWrapper) csWrapper.style.bottom = '380px'; // Поднимаем над клавиатурой
                 
@@ -1850,7 +1906,17 @@
         }
 
         function closeMathKeyboard() {
-            if (!activeInputId) return; // Если уже закрыта, ничего не делаем (чтобы не сбивать фокус родной клавиатуры)
+            if (!activeInputId) return; // Если уже закрыта, ничего не делаем
+            
+            if (currentAppState === 'math_keyboard') {
+                history.back();
+            } else {
+                closeMathKeyboardVisuals();
+            }
+        }
+
+        function closeMathKeyboardVisuals() {
+            if (!activeInputId) return;
             
             const kb = document.getElementById('math-keyboard');
             kb.classList.remove('visible');
