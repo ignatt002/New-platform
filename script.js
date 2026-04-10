@@ -91,7 +91,7 @@
                 renderTopics();
             } catch (error) {
                 console.error("Ошибка при загрузке данных:", error);
-                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Проверьте ссылки на GitHub и формат файлов (должен быть корректный JSON).</div>';
+                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Не переживайте, я уже исправляю это!</div>';
             }
         }
 
