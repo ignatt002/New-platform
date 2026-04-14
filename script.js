@@ -24,6 +24,7 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/cheatsheets.json"
         // ===================================================
         const CHEAT_SHEET_URLS = [
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/Discriminant",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/hpargalka.json",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/Veroatnost"
         ];
