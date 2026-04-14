@@ -12,7 +12,7 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
         // ===================================================
         const TOPIC_URLS = [
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/8-zadanie",
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/AItema",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/9-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/10-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/13-zadanie.json",
@@ -91,7 +91,7 @@
                 renderTopics();
             } catch (error) {
                 console.error("Ошибка при загрузке данных:", error);
-                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Ой... Не переживайте, я уже исправляю это!</div>';
+                topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Проверьте ссылки на GitHub и формат файлов (должен быть корректный JSON).</div>';
             }
         }
 
@@ -1449,6 +1449,9 @@
                 if (!str) return "";
                 let s = str.replace(/\s+/g, '').toLowerCase();
                 
+                // Заменяем запятые на точки для унификации десятичных дробей
+                s = s.replace(/,/g, '.');
+                
                 // Исправляем частую ошибку, когда в JSON забывают экранировать слеш (sqrt вместо \sqrt)
                 s = s.replace(/(^|[^\\])sqrt/g, '$1\\sqrt');
                 s = s.replace(/(^|[^\\])frac/g, '$1\\frac');
@@ -2026,6 +2029,7 @@
             else if (text === 'D(f)') mf.executeCommand(['insert', 'D(f)']);
             else if (text === 'E(f)') mf.executeCommand(['insert', 'E(f)']);
             else if (text === ';') mf.executeCommand(['insert', ';']);
+            else if (text === ',') mf.executeCommand(['insert', ',']);
             else mf.executeCommand(['insert', text]);
             
             mf.dispatchEvent(new Event('input'));
