@@ -12,7 +12,6 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
         // ===================================================
         const TOPIC_URLS = [
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/AItema",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/9-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/10-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/13-zadanie.json",
