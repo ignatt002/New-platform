@@ -1,6 +1,6 @@
 /* ===================================================
-           КОНСТРУКТОР КУРСА (БАЗА ДАННЫХ)
-           Здесь вы можете легко добавлять темы, кругляшки и уроки!
+           база данных
+           здесь добавлять темы и уроки
            =================================================== */
         let COURSE_DATA = {
             topics: [],
@@ -12,6 +12,7 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
         // ===================================================
         const TOPIC_URLS = [
+            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/6-zadanie.json",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/8-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/9-zadanie",
             "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/10-zadanie",
