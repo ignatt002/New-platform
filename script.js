@@ -12,13 +12,13 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
         // ===================================================
         const TOPIC_URLS = [
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/6-zadanie.json",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/8-zadanie.json",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/9-zadanie",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/10-zadanie",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/13-zadanie.json",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/14%20%D0%B7%D0%B0%D0%B4%D0%B0%D0%BD%D0%B8%D0%B5",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/20-zadanie"
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/6-zadanie.json",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/8-zadanie.json",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/9-zadanie",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/10-zadanie",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/13-zadanie.json",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/14%20%D0%B7%D0%B0%D0%B4%D0%B0%D0%BD%D0%B8%D0%B5",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/20-zadanie"
         ];
 
         // ===================================================
