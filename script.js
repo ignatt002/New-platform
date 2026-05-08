@@ -26,9 +26,9 @@
         // Пример: "https://raw.githubusercontent.com/username/repo/main/cheatsheets.json"
         // ===================================================
         const CHEAT_SHEET_URLS = [
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/Discriminant",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/hpargalka.json",
-            "https://raw.githubusercontent.com/ignatt002/blait/refs/heads/main/Veroatnost"
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/Discriminant",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/hpargalka.json",
+  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/Veroatnost"
         ];
 
         async function loadCourseData() {
