@@ -16,7 +16,6 @@
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/8-zadanie.json",
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/9-zadanie",
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/10-zadanie",
-  "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/10proverka.json",
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/13-zadanie.json",
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/14%20%D0%B7%D0%B0%D0%B4%D0%B0%D0%BD%D0%B8%D0%B5",
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/20-zadanie"
