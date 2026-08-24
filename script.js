@@ -1781,7 +1781,7 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
         }
 
         function goToReportForm() {
-            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
+            window.open('https://forms.gle/HWW5ci8TV5Hu9M598', '_blank');
             closeReportModal();
         }
 
