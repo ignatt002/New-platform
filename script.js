@@ -1,3 +1,10 @@
+function onFirebaseReady(callback) {
+  if (window.firebaseReady) {
+    callback(); // Firebase уже готов — запускаем сразу
+  } else {
+    window.addEventListener("firebase-ready", callback); // ещё не готов — ждём сигнал
+  }
+}
 /* ===================================================
            база данных
            здесь добавлять темы и уроки
@@ -61,8 +68,8 @@
                     if (data.topic) {
                         // Клонируем объект, чтобы не мутировать исходный, если ссылки одинаковые
                         let topicCopy = JSON.parse(JSON.stringify(data.topic));
-                        // Гарантируем уникальность ID, добавляя индекс
-                        topicCopy.id = topicCopy.id + '-' + index;
+topicCopy.baseId = data.topic.id;
+topicCopy.id = topicCopy.id + '-' + index;
                         COURSE_DATA.topics.push(topicCopy);
                     }
                     if (data.lessons) {
@@ -92,6 +99,7 @@
                 // После загрузки всех данных рендерим темы
                 preprocessCourseData();
                 renderTopics();
+                renderRepetitionTopics();
             } catch (error) {
                 console.error("Ошибка при загрузке данных:", error);
                 topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #ff4b4b; font-weight: 700;">Ошибка загрузки тем.<br>Ой... Не переживайте, я уже исправляю это!</div>';
@@ -276,6 +284,9 @@
         let currentTopic = null;
         let currentLesson = null;
         let currentLessonId = null;
+let currentLessonFailedTasks = [];
+let justCompletedLessonId = null;
+let currentTopicBaseId = null;
         let currentTaskIndex = 0;
         let lessonStartTime = 0;
         let lessonErrors = 0;
@@ -337,6 +348,9 @@
         window.onload = () => {
             loadCourseData();
             initLongPressKeys();
+            initAccountLogic();
+            updateBottomNavVisibility('page-topics');
+            updateBottomNavActive('topics');
         };
 
         function renderTopics() {
@@ -506,39 +520,41 @@
                 currentAppState = 'path';
             }
             // 2. Theory Modals
-            else if (currentAppState === 'theory' && (targetPage === 'path' || targetPage === 'lesson')) {
+            else if (currentAppState === 'theory' && (targetPage === 'path' || targetPage === 'lesson' || targetPage === 'repetition' || targetPage === 'topics')) {
                 document.getElementById('theory-view').classList.remove('active');
+                if (targetPage !== 'lesson') {
+                    showBottomNavForAppPage(targetPage);
+                }
                 currentAppState = targetPage;
             }
-            // 3. Exit Modal (from Lesson X button)
-            else if (currentAppState === 'exit_modal' && targetPage === 'lesson') {
-                hideExitModalVisuals();
-                currentAppState = 'lesson';
+            // 2b. Repetition setup modal
+            else if (currentAppState === 'repetition_setup' && targetPage === 'repetition') {
+                hideRepetitionSetupVisuals();
+                showBottomNavForAppPage('repetition');
+                currentAppState = 'repetition';
             }
-            // 4. Exit Modal (from Hardware Back button in Lesson)
-            else if (currentAppState === 'exit_modal' && targetPage === 'path') {
+            // 3/4. Exit Modal (кнопка "Да" в уроке или аппаратная кнопка "Назад")
+            else if (currentAppState === 'exit_modal' && (targetPage === 'path' || targetPage === 'lesson' || targetPage === 'repetition')) {
                 if (isProgrammaticBack) {
                     isProgrammaticBack = false;
                     hideExitModalVisuals();
                     setTimeout(() => {
                         actuallyCloseLesson();
                     }, 300);
-                    currentAppState = 'path';
+                    currentAppState = targetPage;
                 } else {
-                    // User pressed hardware back to dismiss modal.
                     hideExitModalVisuals();
-                    history.pushState({ page: 'lesson' }, '');
-                    currentAppState = 'lesson';
+                    currentAppState = targetPage === 'lesson' ? 'lesson' : targetPage;
                 }
             }
-            // 5. Lesson -> Path (Hardware Back)
-            else if (currentAppState === 'lesson' && targetPage === 'path') {
+            // 5. Lesson -> Path or Repetition (Hardware Back)
+            else if (currentAppState === 'lesson' && (targetPage === 'path' || targetPage === 'repetition')) {
                 if (lessonCompleted) {
                     actuallyCloseLesson();
-                    currentAppState = 'path';
+                    currentAppState = lessonReturnMenuPage === 'page-repetition' ? 'repetition' : 'path';
                 } else {
-                    // Show exit modal instead of leaving
-                    history.pushState({ page: 'exit_modal', from: 'path' }, '');
+                    const fromPage = lessonReturnMenuPage === 'page-repetition' ? 'repetition' : 'path';
+                    history.pushState({ page: 'exit_modal', from: fromPage }, '');
                     showExitModalVisuals();
                     currentAppState = 'exit_modal';
                 }
@@ -564,6 +580,15 @@
                 navigateMenu('page-topics', true);
                 currentAppState = 'topics';
             }
+            // 10. Repetition <-> Topics
+            else if (currentAppState === 'repetition' && targetPage === 'topics') {
+                navigateToMenuTab('topics', true);
+                currentAppState = 'topics';
+            }
+            else if (currentAppState === 'topics' && targetPage === 'repetition') {
+                navigateToMenuTab('repetition', true);
+                currentAppState = 'repetition';
+            }
             // Fallbacks
             else if (targetPage === 'path') {
                 navigateMenu('page-path', true);
@@ -580,8 +605,26 @@
                 } else if (currentAppState === 'path' || currentAppState === 'path_popup') {
                     hideLessonPopupVisuals();
                     navigateMenu('page-topics', true);
+                } else if (currentAppState === 'repetition') {
+                    navigateToMenuTab('topics', true);
                 }
                 currentAppState = 'topics';
+            }
+            else if (targetPage === 'repetition') {
+                if (currentAppState === 'lesson' || currentAppState === 'exit_modal' || currentAppState === 'theory' || currentAppState === 'math_keyboard' || currentAppState === 'lesson_dropdown' || currentAppState === 'report_modal') {
+                    hideExitModalVisuals();
+                    document.getElementById('theory-view').classList.remove('active');
+                    document.getElementById('lesson-dropdown').classList.add('hidden');
+                    document.getElementById('report-modal-overlay').classList.add('hidden');
+                    closeMathKeyboardVisuals();
+                    actuallyCloseLesson();
+                } else if (currentAppState === 'path' || currentAppState === 'path_popup') {
+                    hideLessonPopupVisuals();
+                    navigateToMenuTab('repetition', true);
+                } else if (currentAppState === 'topics') {
+                    navigateToMenuTab('repetition', true);
+                }
+                currentAppState = 'repetition';
             }
         });
 
@@ -628,8 +671,16 @@
                     currentAppState = page;
                 }
             }
+
+            updateBottomNavVisibility(targetPageId);
+            if (targetPageId === 'page-topics' || targetPageId === 'page-path') updateBottomNavActive('topics');
             
-            const currentId = targetPageId === 'page-path' ? 'page-topics' : 'page-path';
+            const pages = ['page-topics', 'page-path', 'page-repetition'];
+            const currentVisible = pages.find(id => !document.getElementById(id).classList.contains('hidden')) || 'page-topics';
+            
+            if (currentVisible === targetPageId) return;
+            
+            const currentId = currentVisible;
             const current = document.getElementById(currentId);
             const target = document.getElementById(targetPageId);
             
@@ -639,23 +690,26 @@
             }
 
             isNavigating = true;
-            const isForward = targetPageId === 'page-path';
-            
-            current.style.animation = isForward ? 'slideOutLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideOutRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
-            
-            setTimeout(() => {
-                current.classList.add('hidden');
-                current.style.animation = '';
-                
-                target.classList.remove('hidden');
-                target.style.animation = isForward ? 'slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideInLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
-                window.scrollTo(0, 0);
-                
-                setTimeout(() => {
-                    target.style.animation = '';
-                    isNavigating = false;
-                }, 300);
-            }, 250);
+const isForward = targetPageId === 'page-path';
+
+document.body.style.minHeight = document.body.scrollHeight + 'px';
+
+current.style.animation = isForward ? 'slideOutLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideOutRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+
+setTimeout(() => {
+    current.classList.add('hidden');
+    current.style.animation = '';
+    
+    target.classList.remove('hidden');
+    target.style.animation = isForward ? 'slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' : 'slideInLeft 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+    window.scrollTo(0, 0);
+    
+    setTimeout(() => {
+        target.style.animation = '';
+        isNavigating = false;
+        document.body.style.minHeight = '';
+    }, 300);
+}, 250);
         }
 
         // Вспомогательная функция для затемнения цвета (для 3D тени)
@@ -674,11 +728,344 @@
         let currentTopicId = null;
         let currentSubtopicIndex = null;
         let savedPathScrollPosition = 0;
+        let savedMenuScrollPosition = 0;
+        let lessonReturnMenuPage = 'page-topics';
+        let activeMenuTab = 'topics';
+
+        const REPETITION_TASK_COUNT = 10;
+
+        const REPETITION_TOPIC_META = {
+            '6 задание': { subtitle: 'Дроби и вычисления', icon: 'divide' },
+            '7 задание': { subtitle: 'Координатная прямая', icon: 'move-horizontal' },
+            '8 задание': { subtitle: 'Алгебраические выражения', icon: 'calculator' },
+            '9 задание': { subtitle: 'Уравнения и системы', icon: 'root-x' },
+            '10 задание': { subtitle: 'Вероятности', icon: 'dices' },
+            '11 задание': { subtitle: 'Графики функций', icon: 'line-chart' },
+            '13 задание': { subtitle: 'Решение неравенств', icon: 'greater-equal' },
+            '14 задание': { subtitle: 'Прогрессии', icon: 'trending-up' }
+        };
+
+        function getRepetitionTopicMeta(topic) {
+            const meta = REPETITION_TOPIC_META[topic.title];
+            if (meta) return meta;
+            return {
+                subtitle: topic.subtopics[0] ? topic.subtopics[0].title : 'Все разделы темы',
+                icon: 'calculator'
+            };
+        }
+
+        function getRepetitionIconSvg(iconName) {
+            const icons = {
+                divide: '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+                'move-horizontal': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8l4 4-4 4"/><path d="M6 8l-4 4 4 4"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
+                calculator: '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="8" y2="18.01"/><line x1="12" y1="18" x2="16" y2="18"/></svg>',
+                'root-x': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l3 5 5-13h11"/><path d="M13 11l6 6"/><path d="M19 11l-6 6"/></svg>',
+                dices: '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
+                'line-chart': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-8"/></svg>',
+                'greater-equal': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 5-14 5"/><path d="M5 20l14-5"/></svg>',
+                'trending-up': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-10"/><path d="M14 5h7v7"/></svg>'
+            };
+            return icons[iconName] || icons.calculator;
+        }
+
+        function gatherRepetitionTasksFromTopic(topic, count, subtopicIndices = null) {
+            let allTasks = [];
+            topic.subtopics.forEach((st, index) => {
+                if (subtopicIndices !== null && !subtopicIndices.includes(index)) return;
+                st.levels.forEach(l => {
+                    const lId = typeof l === 'object' ? l.lessonId : l;
+                    const lesson = COURSE_DATA.lessons[lId];
+                    if (lesson && !lesson.isRepetition && !lesson.isGenerator && lesson.tasks) {
+                        lesson.tasks.forEach(task => {
+                            if (task['повторение темы'] === 'нет' || task['повторение темы'] === false) return;
+                            if (task.correctAnswer !== undefined && task.correctAnswer !== "") {
+                                allTasks.push({ ...task });
+                            }
+                        });
+                    }
+                });
+            });
+            allTasks.sort(() => Math.random() - 0.5);
+            return allTasks.slice(0, count);
+        }
+
+        function getVisibleMenuPageId() {
+            if (!document.getElementById('page-path').classList.contains('hidden')) return 'page-path';
+            if (!document.getElementById('page-repetition').classList.contains('hidden')) return 'page-repetition';
+            return 'page-topics';
+        }
+
+        function showBottomNavForAppPage(appPage) {
+            const pageId = appPage === 'path' ? 'page-path' : appPage === 'repetition' ? 'page-repetition' : 'page-topics';
+            showBottomNav(pageId);
+        }
+
+        function hideBottomNav() {
+            const bottomNav = document.getElementById('bottom-nav');
+            const menuView = document.getElementById('menu-view');
+            if (!bottomNav) return;
+            bottomNav.classList.add('nav-hidden');
+            if (menuView) menuView.classList.add('bottom-nav-hidden');
+        }
+
+        function showBottomNav(pageId) {
+            const bottomNav = document.getElementById('bottom-nav');
+            const menuView = document.getElementById('menu-view');
+            const showNav = pageId === 'page-topics' || pageId === 'page-repetition' || pageId === 'page-path' || pageId === 'page-account';
+            if (!bottomNav) return;
+            if (showNav) {
+                bottomNav.classList.remove('nav-hidden');
+                if (menuView) menuView.classList.remove('bottom-nav-hidden');
+            } else {
+                hideBottomNav();
+            }
+        }
+
+        function updateBottomNavVisibility(pageId) {
+            const theoryOpen = document.getElementById('theory-view')?.classList.contains('active');
+            const lessonOpen = !document.getElementById('lesson-view')?.classList.contains('hidden');
+            const setupOpen = document.getElementById('repetition-setup-overlay')?.classList.contains('overlay-visible');
+            if (theoryOpen || lessonOpen || setupOpen) {
+                hideBottomNav();
+                return;
+            }
+            showBottomNav(pageId);
+        }
+
+        let pendingRepetitionTopicId = null;
+
+        function openRepetitionSetup(topicId) {
+            const topic = COURSE_DATA.topics.find(t => t.id === topicId);
+            if (!topic) return;
+
+            pendingRepetitionTopicId = topicId;
+            document.getElementById('rep-setup-title').innerText = topic.title;
+
+            const list = document.getElementById('rep-setup-subtopics');
+            list.innerHTML = '';
+            topic.subtopics.forEach((st, index) => {
+                const row = document.createElement('label');
+                row.className = 'repetition-setup-row';
+                row.innerHTML = `
+                    <span class="repetition-setup-row-text">${st.title}</span>
+                    <span class="repetition-setup-checkbox-wrap">
+                        <input type="checkbox" class="repetition-setup-checkbox" checked data-index="${index}">
+                        <span class="repetition-setup-checkmark"></span>
+                    </span>
+                `;
+                list.appendChild(row);
+            });
+
+            const startBtn = document.getElementById('rep-setup-start');
+            startBtn.style.backgroundColor = '#be6cf1';
+            startBtn.style.boxShadow = `0 4px 0 ${darkenColor('#be6cf1', 20)}`;
+
+            showRepetitionSetupVisuals();
+            hideBottomNav();
+
+            if (currentAppState !== 'repetition_setup') {
+                history.pushState({ page: 'repetition_setup' }, '');
+                currentAppState = 'repetition_setup';
+            }
+        }
+
+        function showRepetitionSetupVisuals() {
+            const overlay = document.getElementById('repetition-setup-overlay');
+            overlay.classList.remove('overlay-hidden');
+            void overlay.offsetWidth;
+            overlay.classList.add('overlay-visible');
+        }
+
+        function hideRepetitionSetupVisuals() {
+            const overlay = document.getElementById('repetition-setup-overlay');
+            overlay.classList.remove('overlay-visible');
+            overlay.classList.add('overlay-hidden');
+            pendingRepetitionTopicId = null;
+        }
+
+        function closeRepetitionSetup(fromPopState = false) {
+            const overlay = document.getElementById('repetition-setup-overlay');
+            if (overlay.classList.contains('overlay-hidden')) return;
+
+            hideRepetitionSetupVisuals();
+            if (!fromPopState && currentAppState === 'repetition_setup') {
+                history.back();
+            } else {
+                showBottomNav(getVisibleMenuPageId());
+            }
+        }
+
+        function confirmRepetitionSetup() {
+            const topic = COURSE_DATA.topics.find(t => t.id === pendingRepetitionTopicId);
+            if (!topic) return;
+
+            const selectedIndices = [];
+            document.querySelectorAll('.repetition-setup-checkbox').forEach(cb => {
+                if (cb.checked) selectedIndices.push(parseInt(cb.dataset.index, 10));
+            });
+
+            if (selectedIndices.length === 0) {
+                alert('Выберите хотя бы одну подтему!');
+                return;
+            }
+
+            const tasks = gatherRepetitionTasksFromTopic(topic, REPETITION_TASK_COUNT, selectedIndices);
+            if (tasks.length === 0) {
+                alert('Не найдено заданий для повторения с выбранными подтемами!');
+                return;
+            }
+
+            const topicId = pendingRepetitionTopicId;
+            hideRepetitionSetupVisuals();
+            if (currentAppState === 'repetition_setup') {
+                history.replaceState({ page: 'repetition' }, '');
+                currentAppState = 'repetition';
+            }
+            startTopicRepetition(topicId, tasks);
+        }
+
+        function updateBottomNavActive(tab) {
+            activeMenuTab = tab;
+            const homeBtn = document.getElementById('nav-home');
+            const repeatBtn = document.getElementById('nav-repeat');
+            const accountBtn = document.getElementById('nav-account');
+            if (homeBtn) homeBtn.classList.toggle('active', tab === 'topics');
+            if (repeatBtn) repeatBtn.classList.toggle('active', tab === 'repetition');
+            if (accountBtn) accountBtn.classList.toggle('active', tab === 'account');
+        }
+        function showMenuPage(pageId, fromPopState = false) {
+            ['page-topics', 'page-path', 'page-repetition', 'page-account'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+            updateBottomNavVisibility(pageId);
+
+            if (pageId === 'page-topics') updateBottomNavActive('topics');
+            if (pageId === 'page-path') updateBottomNavActive('topics');
+            if (pageId === 'page-repetition') updateBottomNavActive('repetition');
+            if (pageId === 'page-account') updateBottomNavActive('account');
+        }
+
+        function navigateToMenuTab(tab, fromPopState = false) {
+            if (tab === activeMenuTab && !fromPopState) {
+                const currentPage = tab === 'topics' ? 'page-topics' : (tab === 'repetition' ? 'page-repetition' : 'page-account');
+                if (!document.getElementById(currentPage).classList.contains('hidden')) return;
+            }
+
+            if (!fromPopState) {
+                const page = tab === 'topics' ? 'topics' : (tab === 'repetition' ? 'repetition' : 'account');
+                if (currentAppState !== page && currentAppState !== 'path' && currentAppState !== 'path_popup') {
+                    history.pushState({ page: page }, '');
+                    currentAppState = page;
+                } else if (currentAppState === 'path' || currentAppState === 'path_popup') {
+                    history.pushState({ page: page }, '');
+                    currentAppState = page;
+                    hideLessonPopupVisuals();
+                }
+            }
+
+            const targetPage = tab === 'topics' ? 'page-topics' : (tab === 'repetition' ? 'page-repetition' : 'page-account');
+            if (tab === 'account') {
+                renderProgressTable();
+                updateAccountUI();
+            }
+            showMenuPage(targetPage, fromPopState);
+            window.scrollTo(0, 0);
+        }
+
+        function renderRepetitionTopics() {
+            const container = document.getElementById('repetition-topics-container');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            if (COURSE_DATA.topics.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding: 40px; color: #afafaf; font-weight: 700;">Темы ещё не загружены</div>';
+                return;
+            }
+
+            COURSE_DATA.topics.forEach(topic => {
+                const meta = getRepetitionTopicMeta(topic);
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'repetition-card';
+                card.innerHTML = `
+                    <div class="repetition-card-text">
+                        <span class="repetition-card-title">${topic.title}</span>
+                        <span class="repetition-card-subtitle">${meta.subtitle}</span>
+                    </div>
+                    <div class="repetition-card-icon-wrap">${getRepetitionIconSvg(meta.icon)}</div>
+                `;
+                card.onclick = () => openRepetitionSetup(topic.id);
+                container.appendChild(card);
+            });
+        }
+
+        function startTopicRepetition(topicId, tasks = null) {
+            const topic = COURSE_DATA.topics.find(t => t.id === topicId);
+            if (!topic) return;
+
+            if (!tasks) {
+                tasks = gatherRepetitionTasksFromTopic(topic, REPETITION_TASK_COUNT);
+            }
+            if (tasks.length === 0) {
+                alert('Не найдено заданий для повторения в этой теме!');
+                return;
+            }
+
+            lessonReturnMenuPage = 'page-repetition';
+            savedMenuScrollPosition = window.scrollY || document.documentElement.scrollTop;
+
+            currentTopic = topic;
+            currentTopicId = topic.id;
+            currentSubtopicIndex = null;
+            currentLessonId = 'repetition-' + topic.id;
+            currentLesson = {
+                title: 'Повторение',
+                path: topic.title + ' · Повторение',
+                tasks: tasks,
+                isRepetition: true
+            };
+
+            lessonCompleted = false;
+            if (currentAppState !== 'repetition') {
+                history.pushState({ page: 'repetition' }, '');
+                currentAppState = 'repetition';
+            }
+            history.pushState({ page: 'lesson' }, '');
+            currentAppState = 'lesson';
+            lessonStartTime = Date.now();
+            lessonErrors = 0;
+            currentTaskIndex = 0;
+
+            const csWrapper = document.getElementById('cheat-sheet-wrapper');
+            if (csWrapper) csWrapper.style.display = 'flex';
+
+            document.getElementById('generator-controls').style.display = 'none';
+            loadTask();
+
+            const menuView = document.getElementById('menu-view');
+            const lessonView = document.getElementById('lesson-view');
+            const bottomNav = document.getElementById('bottom-nav');
+            hideBottomNav();
+
+            menuView.style.animation = 'viewFadeOut 0.3s forwards';
+            setTimeout(() => {
+                menuView.classList.add('hidden');
+                menuView.style.animation = '';
+
+                lessonView.classList.remove('hidden');
+                lessonView.style.animation = 'viewFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+                window.scrollTo(0, 0);
+            }, 250);
+        }
 
         function openTopic(topicId, subtopicIndex) {
             currentTopicId = topicId;
             currentSubtopicIndex = subtopicIndex;
             const topic = COURSE_DATA.topics.find(t => t.id === topicId);
+currentTopicBaseId = topic.baseId;
             const subtopic = topic.subtopics[subtopicIndex];
             
             const pathHeaderBlock = document.getElementById('path-header-block');
@@ -703,38 +1090,52 @@
             pathContainer.innerHTML = '';
 
             let displayCounter = 1;
-            subtopic.levels.forEach((level, index) => {
-                const lessonId = typeof level === 'object' ? level.lessonId : level;
-                const lesson = COURSE_DATA.lessons[lessonId];
-                
-                const btn = document.createElement('button');
-                btn.className = 'level-circle';
-                
-                if (lesson && lesson.isTest) {
-                    btn.innerText = 'КР';
-                    btn.style.fontSize = '28px';
-                    btn.style.fontWeight = '900';
-                } else if (lesson && lesson.isRepetition) {
-                    btn.innerHTML = '&#8635;';
-                    btn.style.fontSize = '40px';
-                    btn.style.fontWeight = '900';
-                    btn.style.lineHeight = '1';
-                } else if (lesson && lesson.isGenerator) {
-                    btn.innerText = 'ГЕН';
-                    btn.style.fontSize = '20px';
-                    btn.style.fontWeight = '900';
-                } else {
-                    btn.innerText = displayCounter++;
-                }
+          subtopic.levels.forEach((level, index) => {
+    const lessonId = typeof level === 'object' ? level.lessonId : level;
+    const lesson = COURSE_DATA.lessons[lessonId];
+    
+    const btn = document.createElement('button');
+    btn.className = 'level-circle';
+    btn.dataset.lessonId = lessonId;
 
-                const shadowColor = darkenColor(topic.color, 20);
-                btn.style.backgroundColor = topic.color;
-                btn.style.setProperty('--shadow-color', shadowColor);
-                
-                btn.onclick = (e) => showLessonPopup(e, lessonId, btn, topic.color, subtopic.title);
-                
-                pathContainer.appendChild(btn);
-            });
+    const numberSpan = document.createElement('span');
+    numberSpan.className = 'level-number-text';
+    
+    if (lesson && lesson.isTest) {
+        numberSpan.innerText = 'КР';
+        numberSpan.style.fontSize = '28px';
+        numberSpan.style.fontWeight = '900';
+    } else if (lesson && lesson.isRepetition) {
+        numberSpan.innerHTML = '&#8635;';
+        numberSpan.style.fontSize = '40px';
+        numberSpan.style.fontWeight = '900';
+        numberSpan.style.lineHeight = '1';
+    } else if (lesson && lesson.isGenerator) {
+        numberSpan.innerText = 'ГЕН';
+        numberSpan.style.fontSize = '20px';
+        numberSpan.style.fontWeight = '900';
+    } else {
+        numberSpan.innerText = displayCounter++;
+    }
+    btn.appendChild(numberSpan);
+
+    const shadowColor = darkenColor(topic.color, 20);
+    btn.style.backgroundColor = topic.color;
+    btn.style.setProperty('--shadow-color', shadowColor);
+
+    const isRegularLesson = !(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator));
+    const isCompleted = isRegularLesson && topic.baseId && userProgress[topic.baseId] &&
+        userProgress[topic.baseId][lessonId] && userProgress[topic.baseId][lessonId].completed;
+
+    if (isCompleted) {
+        renderLevelCircleCheckmark(btn, false);
+        numberSpan.style.display = 'none';
+    }
+    
+    btn.onclick = (e) => showLessonPopup(e, lessonId, btn, topic.color, subtopic.title);
+    
+    pathContainer.appendChild(btn);
+});
 
             navigateMenu('page-path');
         }
@@ -822,10 +1223,12 @@
 
         function startLesson(lessonId) {
             lessonCompleted = false;
+            lessonReturnMenuPage = 'page-path';
             history.pushState({ page: 'lesson' }, '');
             currentAppState = 'lesson';
             lessonStartTime = Date.now();
             lessonErrors = 0;
+currentLessonFailedTasks = [];
             currentLessonId = lessonId;
             currentLesson = COURSE_DATA.lessons[lessonId];
             if (!currentLesson) {
@@ -868,7 +1271,7 @@
                 genControls.style.display = 'none';
             }
 
-            if (currentLesson.isRepetition) {
+            if (currentLesson.isRepetition && currentLessonId && !String(currentLessonId).startsWith('repetition-')) {
                 let parentTopic = null;
                 for (const t of COURSE_DATA.topics) {
                     for (const st of t.subtopics) {
@@ -881,26 +1284,9 @@
                 }
 
                 if (parentTopic) {
-                    let allTasks = [];
-                    parentTopic.subtopics.forEach(st => {
-                        st.levels.forEach(l => {
-                            const lId = typeof l === 'object' ? l.lessonId : l;
-                            const lesson = COURSE_DATA.lessons[lId];
-                            if (lesson && !lesson.isRepetition && lesson.tasks) {
-                                lesson.tasks.forEach(task => {
-                                    if (task['повторение темы'] === 'нет' || task['повторение темы'] === false) return;
-                                    if (task.correctAnswer !== undefined && task.correctAnswer !== "") {
-                                        allTasks.push({...task});
-                                    }
-                                });
-                            }
-                        });
-                    });
-
-                    allTasks.sort(() => Math.random() - 0.5);
                     const count = currentLesson.tasksToGather || 5;
-                    currentLesson.tasks = allTasks.slice(0, count);
-                    
+                    currentLesson.tasks = gatherRepetitionTasksFromTopic(parentTopic, count);
+
                     if (currentLesson.tasks.length === 0) {
                         alert("Не найдено заданий для повторения!");
                         return;
@@ -915,6 +1301,8 @@
 
             const menuView = document.getElementById('menu-view');
             const lessonView = document.getElementById('lesson-view');
+            const bottomNav = document.getElementById('bottom-nav');
+            hideBottomNav();
             
             menuView.style.animation = 'viewFadeOut 0.3s forwards';
             setTimeout(() => {
@@ -1112,7 +1500,8 @@
         }
 
         function confirmCloseLesson() {
-            history.pushState({ page: 'exit_modal', from: 'lesson' }, '');
+            const fromPage = lessonReturnMenuPage === 'page-repetition' ? 'repetition' : 'lesson';
+            history.pushState({ page: 'exit_modal', from: fromPage }, '');
             currentAppState = 'exit_modal';
             showExitModalVisuals();
         }
@@ -1129,7 +1518,7 @@
             if (currentAppState === 'exit_modal') {
                 isProgrammaticBack = true;
                 const stateFrom = history.state ? history.state.from : null;
-                if (stateFrom === 'lesson') {
+                if (stateFrom === 'lesson' || stateFrom === 'repetition') {
                     history.go(-2);
                 } else {
                     history.back();
@@ -1142,9 +1531,16 @@
             }
         }
 
-        function showCompletionModal() {
-            lessonCompleted = true;
-            const timeSpent = Math.floor((Date.now() - lessonStartTime) / 1000);
+function showCompletionModal() {
+    lessonCompleted = true;
+markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks);
+  justCompletedLessonId = currentLessonId;
+
+    const guestWarning = document.getElementById('comp-guest-warning');
+    const isLoggedIn = window.firebaseAuth && window.firebaseAuth.currentUser;
+    if (guestWarning) guestWarning.style.display = isLoggedIn ? 'none' : 'flex';
+
+    const timeSpent = Math.floor((Date.now() - lessonStartTime) / 1000);
             const minutes = Math.floor(timeSpent / 60);
             const seconds = timeSpent % 60;
             const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -1190,7 +1586,19 @@
                 
                 menuView.classList.remove('hidden');
                 menuView.style.animation = 'viewFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
-                window.scrollTo(0, savedPathScrollPosition);
+
+                showMenuPage(lessonReturnMenuPage);
+                if (lessonReturnMenuPage === 'page-repetition') {
+                    currentAppState = 'repetition';
+                    window.scrollTo(0, savedMenuScrollPosition);
+                } else if (lessonReturnMenuPage === 'page-path') {
+                    currentAppState = 'path';
+                    window.scrollTo(0, savedPathScrollPosition);
+                    animateJustCompletedLesson();
+                } else {
+                    currentAppState = 'topics';
+                    window.scrollTo(0, savedMenuScrollPosition);
+                }
             }, 250);
         }
 
@@ -1242,6 +1650,7 @@
             }
             
             document.getElementById('theory-view').classList.add('active');
+            hideBottomNav();
             
             if (currentAppState !== 'theory') {
                 history.pushState({ page: 'theory' }, '');
@@ -1297,6 +1706,7 @@
             }
             
             document.getElementById('theory-view').classList.add('active');
+            hideBottomNav();
             
             if (currentAppState !== 'theory') {
                 history.pushState({ page: 'theory' }, '');
@@ -1309,6 +1719,10 @@
             if (!theoryView.classList.contains('active')) return;
             
             theoryView.classList.remove('active');
+            const lessonOpen = !document.getElementById('lesson-view').classList.contains('hidden');
+            if (!lessonOpen) {
+                showBottomNav(getVisibleMenuPageId());
+            }
             if (currentAppState === 'theory') {
                 history.back();
             }
@@ -1500,7 +1914,13 @@
             // Задержка для анимации закрытия клавиатуры
             setTimeout(() => {
                 const isSuccess = (normalizedAnswer === normalizedCorrect);
-                if (!isSuccess) lessonErrors++;
+                if (!isSuccess) {
+    lessonErrors++;
+    const taskNum = currentTaskIndex + 1;
+    if (!currentLessonFailedTasks.includes(taskNum)) {
+        currentLessonFailedTasks.push(taskNum);
+    }
+}
                 
                 animateFooterOpen(isSuccess, () => {
                     if(isSuccess) {
@@ -2186,3 +2606,550 @@
                 }, 50);
             }
         });
+// ==================== FIREBASE: АВТОРИЗАЦИЯ ====================
+onFirebaseReady(() => {
+  const auth = window.firebaseAuth;
+
+  const authOverlay = document.getElementById("auth-overlay");
+  const authAccountBtn = document.getElementById("auth-account-btn");
+  const authTitle = document.getElementById("auth-title");
+  const authEmail = document.getElementById("auth-email");
+  const authPassword = document.getElementById("auth-password");
+  const authError = document.getElementById("auth-error");
+  const authSubmitBtn = document.getElementById("auth-submit-btn");
+  const authToggle = document.getElementById("auth-toggle");
+  const authCloseBtn = document.getElementById("auth-close-btn");
+  const togglePasswordBtn = document.getElementById("auth-toggle-password");
+const eyeIcon = document.getElementById("auth-eye-icon");
+
+togglePasswordBtn.addEventListener("click", () => {
+  const isHidden = authPassword.type === "password";
+  authPassword.type = isHidden ? "text" : "password";
+  eyeIcon.innerHTML = isHidden
+    ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
+    : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+});
+
+  let isRegisterMode = false;
+
+  // Открыть окно входа
+  authAccountBtn.addEventListener("click", () => {
+    if (auth.currentUser) {
+      // Если уже вошёл — кнопка работает как "Выйти"
+      if (confirm("Выйти из аккаунта?")) {
+        import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ signOut }) => {
+          signOut(auth);
+          localStorage.removeItem("platformLogin");
+        });
+      }
+      return;
+    }
+    authError.style.display = "none";
+    authEmail.value = "";
+    authPassword.value = "";
+    authOverlay.classList.remove("hidden");
+  });
+
+  // Клик по фону — закрыть окно
+  authOverlay.addEventListener("click", (e) => {
+    if (e.target === authOverlay) {
+      authOverlay.classList.add("hidden");
+    }
+  });
+
+    // Клик по крестику — закрыть окно
+        authCloseBtn.addEventListener("click", () => {
+          authOverlay.classList.add("hidden");
+        });
+
+        // Прокрутка к полю при открытии клавиатуры
+        [authEmail, authPassword].forEach((input) => {
+          input.addEventListener("focus", () => {
+            setTimeout(() => {
+              input.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+          });
+        });
+
+  // Переключение между "Вход" и "Регистрация"
+  authToggle.addEventListener("click", () => {
+    isRegisterMode = !isRegisterMode;
+    authTitle.textContent = isRegisterMode ? "Регистрация" : "Вход";
+    authSubmitBtn.querySelector(".auth-btn-text").textContent = isRegisterMode ? "Зарегистрироваться" : "Войти";
+    authToggle.textContent = isRegisterMode ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
+    authError.style.display = "none";
+  });
+
+  // Отправка формы
+  authSubmitBtn.addEventListener("click", async () => {
+    authSubmitBtn.classList.add("loading");
+authSubmitBtn.disabled = true;
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    authError.style.display = "none";
+
+    if (!email || !password) {
+    authError.textContent = "Заполните все поля";
+    authError.style.display = "block";
+    authSubmitBtn.classList.remove("loading");
+    authSubmitBtn.disabled = false;
+    return;
+    }
+
+const { signInWithCustomToken } =
+    await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js");
+
+async function attemptAuthRequest(action, email, password) {
+    const res = await fetch("https://d5dkes6tf8o0uff54egi.4b4k4pg5.apigw.yandexcloud.net/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, login: email, password })
+    });
+    const data = await res.json();
+    return { res, data };
+}
+
+try {
+    const action = isRegisterMode ? "register" : "login";
+    let result;
+    try {
+        result = await attemptAuthRequest(action, email, password);
+    } catch (err1) {
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+            result = await attemptAuthRequest(action, email, password);
+        } catch (err2) {
+            await new Promise(r => setTimeout(r, 1000));
+            result = await attemptAuthRequest(action, email, password);
+        }
+    }
+
+    const { res, data } = result;
+
+    if (!res.ok) {
+        authError.textContent = data.error || "Ошибка входа";
+        authError.style.display = "block";
+        return;
+    }
+
+    await signInWithCustomToken(auth, data.token);
+    localStorage.setItem("platformLogin", email);
+    authOverlay.classList.add("hidden");
+} catch (err) {
+    authError.textContent = "Ошибка соединения с сервером";
+    authError.style.display = "block";
+} finally {
+    authSubmitBtn.classList.remove("loading");
+    authSubmitBtn.disabled = false;
+}
+  });
+
+  // Слежение за состоянием входа — обновляем текст кнопки
+  import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ onAuthStateChanged }) => {
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+    authAccountBtn.classList.add('hidden');
+} else {
+    authAccountBtn.textContent = "Войти";
+    authAccountBtn.classList.remove('hidden');
+      }
+    });
+  });
+
+  function translateAuthError(code) {
+    const map = {
+      "auth/email-already-in-use": "Этот email уже зарегистрирован",
+      "auth/invalid-email": "Некорректный email",
+      "auth/weak-password": "Пароль слишком короткий (минимум 6 символов)",
+      "auth/invalid-credential": "Неверный email или пароль",
+      "auth/too-many-requests": "Слишком много попыток, попробуйте позже"
+    };
+    return map[code] || "Ошибка: " + code;
+  }
+});
+// ==================== FIREBASE: ПРОГРЕСС УЧЕНИКА ====================
+let userProgress = {};
+
+async function markLessonComplete(topicId, lessonId, failedTasks) {
+  const auth = window.firebaseAuth;
+  const db = window.firebaseDb;
+  if (!auth.currentUser) return;
+
+  const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js");
+
+  try {
+    await setDoc(
+      doc(db, "users", auth.currentUser.uid),
+      {
+        progress: {
+          [topicId]: {
+            [lessonId]: {
+              completed: true,
+              failedTasks: failedTasks
+            }
+          }
+        }
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("Ошибка сохранения прогресса:", err);
+  }
+}
+
+async function loadUserProgress() {
+  const auth = window.firebaseAuth;
+  const db = window.firebaseDb;
+  if (!auth.currentUser) {
+    userProgress = {};
+    return;
+  }
+
+  const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js");
+
+  try {
+    const snap = await getDoc(doc(db, "users", auth.currentUser.uid));
+    userProgress = snap.exists() ? (snap.data().progress || {}) : {};
+  } catch (err) {
+    console.error("Ошибка загрузки прогресса:", err);
+    userProgress = {};
+  }
+}
+
+onFirebaseReady(() => {
+  const auth = window.firebaseAuth;
+  import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ onAuthStateChanged }) => {
+    onAuthStateChanged(auth, async () => {
+      await loadUserProgress();
+    });
+  });
+});
+
+function renderLevelCircleCheckmark(btn, animate) {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "level-check-svg" + (animate ? "" : " visible"));
+    svg.setAttribute("viewBox", "0 0 100 100");
+
+    const btnRadius = 50;
+    const strokeWidth = 7;
+    const ringRadius = btnRadius - strokeWidth - (strokeWidth / 2);
+
+    const ring = document.createElementNS(svgNS, "circle");
+    ring.setAttribute("class", "level-check-ring");
+    ring.setAttribute("cx", "50");
+    ring.setAttribute("cy", "50");
+    ring.setAttribute("r", ringRadius);
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke", "white");
+    ring.setAttribute("stroke-width", strokeWidth);
+    ring.setAttribute("stroke-linecap", "round");
+    ring.style.transformOrigin = "50px 50px";
+    ring.style.transform = "rotate(-90deg)";
+
+    const check = document.createElementNS(svgNS, "path");
+    check.setAttribute("class", "level-check-mark");
+    check.setAttribute("d", "M33 51 L45 63 L69 37");
+    check.setAttribute("fill", "none");
+    check.setAttribute("stroke", "white");
+    check.setAttribute("stroke-width", "8");
+    check.setAttribute("stroke-linecap", "round");
+    check.setAttribute("stroke-linejoin", "round");
+
+    svg.appendChild(ring);
+    svg.appendChild(check);
+    btn.appendChild(svg);
+
+    const ringLength = 2 * Math.PI * ringRadius;
+    const checkLength = check.getTotalLength();
+
+    ring.style.strokeDasharray = ringLength;
+    check.style.strokeDasharray = checkLength;
+
+    if (animate) {
+        ring.style.transition = 'none';
+        check.style.transition = 'none';
+        ring.style.strokeDashoffset = ringLength;
+        check.style.strokeDashoffset = checkLength;
+        svg.classList.add('visible');
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                ring.style.transition = 'stroke-dashoffset 1.0s ease';
+                ring.style.strokeDashoffset = 0;
+
+                setTimeout(() => {
+                    check.style.transition = 'stroke-dashoffset 0.7s ease';
+                    check.style.strokeDashoffset = 0;
+                }, 350);
+            });
+        });
+    } else {
+        ring.style.strokeDashoffset = 0;
+        check.style.strokeDashoffset = 0;
+    }
+}
+
+function animateJustCompletedLesson() {
+    if (!justCompletedLessonId) return;
+    const btn = document.querySelector(`#path-container .level-circle[data-lesson-id="${justCompletedLessonId}"]`);
+    if (btn) {
+        const numberSpan = btn.querySelector('.level-number-text');
+        renderLevelCircleCheckmark(btn, true);
+        if (numberSpan) numberSpan.classList.add('hidden-anim');
+    }
+    justCompletedLessonId = null;
+}
+
+// --- ЛОГИКА СТРАНИЦЫ АККАУНТА ---
+
+function initAccountLogic() {
+    const dotsBtn = document.getElementById('email-dots-btn');
+    const actionsPanel = document.getElementById('email-actions-panel');
+    const overallWrapper = document.getElementById('overall-progress-wrapper');
+    const btnLogout = document.getElementById('btn-logout');
+    const btnDelete = document.getElementById('btn-delete');
+
+    // Троеточие
+    dotsBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isExpanded = actionsPanel.classList.toggle('open');
+        dotsBtn.classList.toggle('active', isExpanded);
+        overallWrapper.classList.toggle('collapsed', isExpanded);
+    });
+
+    // Закрытие панели при клике вне её
+    document.addEventListener('click', () => {
+        actionsPanel?.classList.remove('open');
+        dotsBtn?.classList.remove('active');
+        overallWrapper?.classList.remove('collapsed');
+    });
+
+    // Кнопка выхода из аккаунта
+    btnLogout?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showAccountModal('logout');
+    });
+
+    // Кнопка удаления аккаунта
+btnDelete?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showAccountModal('delete');
+});
+
+    // Изменение состояния авторизации
+    onFirebaseReady(() => {
+        const auth = window.firebaseAuth;
+        import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ onAuthStateChanged }) => {
+            onAuthStateChanged(auth, (user) => {
+                updateAccountUI(user);
+            });
+        });
+    });
+}
+
+function updateAccountUI(user = null) {
+    const emailDisplay = document.getElementById('user-email-display');
+    const currentUser = user || (window.firebaseAuth ? window.firebaseAuth.currentUser : null);
+
+    if (currentUser) {
+        const savedLogin = localStorage.getItem("platformLogin");
+        if (emailDisplay) emailDisplay.textContent = savedLogin || 'Аккаунт';
+    } else {
+        if (emailDisplay) emailDisplay.textContent = 'Гость';
+    }
+    updateProgressStats();
+}
+
+function showAccountModal(action) {
+    const modal = document.getElementById('confirm-modal');
+    const modalIcon = document.getElementById('modal-icon-container');
+    const modalTitle = document.getElementById('modal-title');
+    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+    if (action === 'logout') {
+        modalIcon.className = 'modal-icon-container purple';
+        modalIcon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>`;
+        modalTitle.textContent = 'Выйти из аккаунта?';
+        modalConfirmBtn.className = 'modal-btn-confirm purple';
+        modalConfirmBtn.textContent = 'Да, выйти';
+        modalConfirmBtn.onclick = () => {
+            if (window.firebaseAuth) {
+                import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ signOut }) => {
+                    signOut(window.firebaseAuth).then(() => {
+                        modal.classList.add('hidden');
+                        showToast('Вы успешно вышли из аккаунта');
+                        navigateToMenuTab('topics');
+                    });
+                });
+            }
+        };
+    } else if (action === 'delete') {
+        modalIcon.className = 'modal-icon-container red';
+        modalIcon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
+        modalTitle.textContent = 'Удалить аккаунт без возможности восстановления?';
+        modalConfirmBtn.className = 'modal-btn-confirm red';
+        modalConfirmBtn.textContent = 'Да, удалить';
+        modalConfirmBtn.onclick = async () => {
+            if (!window.firebaseAuth || !window.firebaseAuth.currentUser) return;
+            modalConfirmBtn.disabled = true;
+            modalConfirmBtn.textContent = 'Удаление...';
+            try {
+                const idToken = await window.firebaseAuth.currentUser.getIdToken();
+                const res = await fetch("https://d5dkes6tf8o0uff54egi.4b4k4pg5.apigw.yandexcloud.net/auth", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "delete", idToken: idToken })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast(data.error || 'Не удалось удалить аккаунт');
+                    modalConfirmBtn.disabled = false;
+                    modalConfirmBtn.textContent = 'Да, удалить';
+                    return;
+                }
+                localStorage.removeItem("platformLogin");
+                modal.classList.add('hidden');
+                showToast('Аккаунт удалён');
+                navigateToMenuTab('topics');
+            } catch (err) {
+                showToast('Ошибка соединения с сервером');
+                modalConfirmBtn.disabled = false;
+                modalConfirmBtn.textContent = 'Да, удалить';
+            }
+        };
+    }
+    modal.classList.remove('hidden');
+}
+
+function renderProgressTable() {
+    const container = document.getElementById('progress-table-container');
+    if (!container) return;
+
+    if (!COURSE_DATA || !COURSE_DATA.topics) {
+        container.innerHTML = '<div style="text-align:center; padding: 20px; color: #9ca3af;">Темы не загружены</div>';
+        return;
+    }
+
+    container.innerHTML = COURSE_DATA.topics.map(t => {
+        // Вычисляем процент прохождения темы на основе userProgress
+        let totalLessons = 0;
+        let completedLessons = 0;
+
+        t.subtopics.forEach(sub => {
+            sub.levels.forEach(level => {
+                const lessonId = typeof level === 'object' ? level.lessonId : level;
+                const lesson = COURSE_DATA.lessons[lessonId];
+                const isRegularLesson = !(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator));
+                
+                if (isRegularLesson) {
+                    totalLessons++;
+                    if (t.baseId && userProgress[t.baseId] && userProgress[t.baseId][lessonId] && userProgress[t.baseId][lessonId].completed) {
+                        completedLessons++;
+                    }
+                }
+            });
+        });
+
+        const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+        const isComplete = progress === 100 && totalLessons > 0;
+        const meta = getRepetitionTopicMeta(t);
+
+        return `
+            <div class="table-row">
+                <div class="row-top">
+                    <div class="row-left">
+                        <div class="row-icon-box ${isComplete ? 'complete' : 'incomplete'}">
+                            ${getRepetitionIconSvg(meta.icon)}
+                        </div>
+                        <div class="row-titles">
+                            <div class="title">${t.title}</div>
+                            <div class="subtitle">${meta.subtitle}</div>
+                        </div>
+                    </div>
+                    <div class="row-right">
+                        <span class="progress-text ${isComplete ? 'complete' : 'incomplete'}">${progress}%</span>
+                        ${isComplete ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#eefce8" stroke="#58CC00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 4px;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>` : ''}
+                    </div>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill ${isComplete ? 'complete' : 'incomplete'}" style="width: ${progress}%">
+                        <div class="specular-highlight"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const totalTasksElem = document.getElementById('total-tasks-count');
+    if (totalTasksElem) {
+        let totalRegularLessons = 0;
+        COURSE_DATA.topics.forEach(t => {
+            t.subtopics.forEach(sub => {
+                sub.levels.forEach(level => {
+                    const lessonId = typeof level === 'object' ? level.lessonId : level;
+                    const lesson = COURSE_DATA.lessons[lessonId];
+                    if (!(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator))) {
+                        totalRegularLessons++;
+                    }
+                });
+            });
+        });
+        totalTasksElem.textContent = `${totalRegularLessons} заданий`;
+    }
+}
+
+function updateProgressStats() {
+    if (!COURSE_DATA || !COURSE_DATA.topics) return;
+
+    let totalLessons = 0;
+    let completedLessons = 0;
+    let masteredCount = 0;
+
+    COURSE_DATA.topics.forEach(t => {
+        let topicTotal = 0;
+        let topicCompleted = 0;
+
+        t.subtopics.forEach(sub => {
+            sub.levels.forEach(level => {
+                const lessonId = typeof level === 'object' ? level.lessonId : level;
+                const lesson = COURSE_DATA.lessons[lessonId];
+                const isRegularLesson = !(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator));
+                
+                if (isRegularLesson) {
+                    totalLessons++;
+                    topicTotal++;
+                    if (t.baseId && userProgress[t.baseId] && userProgress[t.baseId][lessonId] && userProgress[t.baseId][lessonId].completed) {
+                        completedLessons++;
+                        topicCompleted++;
+                    }
+                }
+            });
+        });
+
+        if (topicTotal > 0 && topicCompleted === topicTotal) {
+            masteredCount++;
+        }
+    });
+
+    const totalAvg = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+    const percentageElem = document.getElementById('overall-percentage');
+    const badgeTextElem = document.getElementById('mastered-badge-text');
+
+    if (percentageElem) percentageElem.textContent = `${totalAvg}%`;
+    if (badgeTextElem) badgeTextElem.textContent = `${masteredCount} из ${COURSE_DATA.topics.length} освоено`;
+}
+
+function showToast(text) {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-message');
+    if (!toast || !toastMsg) return;
+
+    toastMsg.textContent = text;
+    toast.classList.remove('hidden');
+
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 2500);
+                }
