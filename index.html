@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FiveCore</title></title>
+    <title>FiveCore</title>
     
     <!-- Вот тут мы подключаем твой файл с дизайном -->
     <link rel="stylesheet" href="style.css">
@@ -14,9 +14,9 @@
     <!-- MathJax для математики -->
     <script>
         window.MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
-            startup: { typeset: false }
-        };
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+    startup: { typeset: false }
+};
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script defer src="https://unpkg.com/mathlive"></script>
@@ -37,6 +37,51 @@
 </head>
 <body>
 
+    <!-- Окно входа/регистрации -->
+<div id="auth-overlay" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5000; display: flex; align-items: center; justify-content: center;">
+  <div style="background: white; border-radius: 16px; padding: 24px; width: 90%; max-width: 340px; position: relative;">
+    <button id="auth-close-btn" class="close-lesson-btn" style="position: absolute; top: 20px; right: 22px; background: none; border: none; padding: 4px; cursor: pointer; font-size: 32px; line-height: 1;">&times;</button>
+    <h2 id="auth-title" style="margin: 0 0 16px 0;">Вход</h2>
+
+    <input id="auth-email" type="email" placeholder="Email" class="auth-input">
+
+<div class="auth-input-group">
+  <input id="auth-password" type="password" placeholder="Пароль" class="auth-input">
+  <button type="button" id="auth-toggle-password" class="auth-toggle-eye">
+    <svg id="auth-eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+  </button>
+</div>
+
+    <div id="auth-error" style="color: #ff4b4b; font-size: 14px; margin-bottom: 10px; display: none;"></div>
+
+    <button id="auth-submit-btn" class="auth-btn-primary" style="margin-bottom: 10px;">
+  <span class="auth-btn-text">Войти</span>
+  <div class="btn-loader-dots">
+    <span class="btn-loader-dot"></span>
+    <span class="btn-loader-dot"></span>
+    <span class="btn-loader-dot"></span>
+  </div>
+    </button>
+
+    <div id="auth-toggle" style="text-align: center; color: #1CB0F6; cursor: pointer; font-size: 14px;">Нет аккаунта? Зарегистрироваться</div>
+  </div>
+</div>
+
+<!-- Кнопка входа (плавающая, поверх интерфейса) -->
+<button id="auth-account-btn" style="position: fixed; top: 12px; right: 12px; z-index: 100; background: white; border: 2px solid #e5e5e5; border-radius: 20px; padding: 8px 16px; font-weight: 700; cursor: pointer;">Войти</button>
+    
+    <!-- Попап настройки повторения -->
+    <div id="repetition-setup-overlay" class="repetition-setup-overlay overlay-hidden" onclick="closeRepetitionSetup()">
+        <div class="repetition-setup-modal" onclick="event.stopPropagation()">
+            <div class="repetition-setup-title" id="rep-setup-title">Тема</div>
+            <div class="repetition-setup-subtopics" id="rep-setup-subtopics"></div>
+            <button type="button" class="repetition-setup-start" id="rep-setup-start" onclick="confirmRepetitionSetup()">Начать</button>
+        </div>
+    </div>
+
     <!-- Попап урока -->
     <div id="lesson-popup" class="popup-hidden">
         <div class="lesson-popup-title" id="lesson-popup-title">Тема урока</div>
@@ -51,6 +96,85 @@
                 <h1>Темы</h1>
                 <div class="grid-container" id="topics-container"></div>
             </div>
+            <div id="page-repetition" class="hidden">
+                <div class="repetition-header">
+                    <h1 class="repetition-title">Повторение</h1>
+                    <p class="repetition-subtitle">Система подберет случайные задания из всех уроков выбранной темы!</p>
+                </div>
+                <div class="repetition-list" id="repetition-topics-container"></div>
+            </div>
+            <div id="page-account" class="hidden">
+                <div class="account-header-v2">
+                    <h1 class="account-title">Аккаунт</h1>
+                    <div class="card email-card">
+                        <div class="email-card-header">
+                            <div class="email-user-info">
+                                <div class="email-icon-box">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a84ee6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="20" height="16" x="2" y="4" rx="2"/>
+                                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                    </svg>
+                                </div>
+                                <div class="email-details">
+                                    <span class="label">ЭЛЕКТРОННАЯ ПОЧТА</span>
+                                    <span class="email-value" id="user-email-display">Гость</span>
+                                </div>
+                            </div>
+                            <button id="email-dots-btn" class="dots-btn" type="button" title="Опции аккаунта">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="1"/>
+                                    <circle cx="12" cy="5" r="1"/>
+                                    <circle cx="12" cy="19" r="1"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="email-actions-panel" class="email-actions-panel">
+              <div class="actions-divider">
+    <a href="privacy.html" class="legal-link">Политика конфиденциальности</a>
+    <a href="terms.html" class="legal-link">Пользовательское соглашение</a>
+    <button id="btn-logout" class="action-btn btn-logout" type="button">              
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a84ee6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                        <polyline points="16 17 21 12 16 7"/>
+                                        <line x1="21" x2="9" y1="12" y2="12"/>
+                                    </svg>
+                                    <span>Выйти из аккаунта</span>
+                                </button>
+              <button id="btn-delete" class="action-btn btn-delete" type="button">                  
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF4B4B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 6h18"/>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                    </svg>
+                                    <span>Удалить аккаунт</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="overall-progress-wrapper" class="overall-progress-wrapper">
+                        <div class="card overall-progress-card">
+                            <div class="overall-info">
+                                <span class="label">ОБЩИЙ ПРОГРЕСС</span>
+                                <span class="overall-percentage" id="overall-percentage">0%</span>
+                            </div>
+                            <div class="mastered-badge">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="8" r="6"/>
+                                    <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+                                </svg>
+                                <span id="mastered-badge-text">0 из 0 освоено</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="progress-table-section">
+                    <div class="table-header">
+                        <h2>Таблица прогресса</h2>
+                        <span class="tasks-count" id="total-tasks-count">0 заданий</span>
+                    </div>
+                    <div class="table-container" id="progress-table-container"></div>
+                </div>
+            </div>
             <div id="page-path" class="hidden">
                 <button class="back-btn" onclick="navigateMenu('page-topics')">← Назад к темам</button>
                 <div class="path-header" id="path-header-block" style="display: flex; align-items: stretch; margin-bottom: 30px; border-radius: 20px; border: 3px solid; box-shadow: 0 4px 0; overflow: hidden; transition: transform 0.2s;">
@@ -64,6 +188,38 @@
             </div>
         </div>
     </div>
+
+    <nav id="bottom-nav" class="bottom-nav">
+        <button type="button" class="bottom-nav-btn bottom-nav-btn-home active" id="nav-home" onclick="navigateToMenuTab('topics')" aria-label="Темы">
+            <span class="bottom-nav-home-ring">
+                <svg class="bottom-nav-icon bottom-nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5z"/>
+                </svg>
+            </span>
+        </button>
+        <button type="button" class="bottom-nav-btn bottom-nav-btn-repeat" id="nav-repeat" onclick="navigateToMenuTab('repetition')" aria-label="Повторение">
+            <span class="bottom-nav-repeat-ring">
+                <span class="bottom-nav-repeat-circle">
+                    <svg class="bottom-nav-icon bottom-nav-icon-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 1l4 4-4 4"/>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                        <path d="M7 23l-4-4 4-4"/>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                    </svg>
+                </span>
+            </span>
+        </button>
+        <button type="button" class="bottom-nav-btn bottom-nav-btn-account" id="nav-account" onclick="navigateToMenuTab('account')" aria-label="Аккаунт">
+            <span class="bottom-nav-account-ring">
+                <span class="bottom-nav-account-circle">
+                    <svg class="bottom-nav-icon bottom-nav-icon-account" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                </span>
+            </span>
+        </button>
+    </nav>
 
     <!-- ОКНО УРОКА -->
     <div id="lesson-view" class="hidden">
@@ -93,7 +249,7 @@
             </div>
         </header>
 
-        <div id="generator-controls" style="display: none; background: #f9f9f9; padding: 10px 20px; justify-content: center; align-items: center; gap: 15px; border-bottom: 1px solid #eee; box-shadow: 0 2px 10px rgba(0,0,0,0.02);">
+        <div id="generator-controls" style="display: none; background: #f9f9f9; padding: 6px 18px 6px 8px; justify-content: center; align-items: center; gap: 15px; border-bottom: 1px solid #eee; box-shadow: 0 2px 10px rgba(0,0,0,0.02);">
             <label for="chaos-level" style="font-weight: 800; color: #4b4b4b; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Хаотичность:</label>
             <input type="number" id="chaos-level" value="2" min="1" max="10" style="width: 60px; border-radius: 12px; border: 2px solid #e5e5e5; padding: 8px; text-align: center; font-weight: 800; font-size: 16px; color: #4b4b4b; outline: none;">
             <button onclick="regenerateTasks()" style="background: var(--lesson-accent); color: white; border: none; border-radius: 12px; padding: 8px 16px; cursor: pointer; font-weight: 800; font-size: 14px; transition: transform 0.2s;">Обновить</button>
@@ -174,6 +330,28 @@
             </footer>
         </div>
     </div>
+
+    <!-- Модальное окно подтверждения (Аккаунт) -->
+    <div id="confirm-modal" class="modal-backdrop-v2 hidden">
+        <div class="modal-card-v2">
+            <div id="modal-icon-container" class="modal-icon-container"></div>
+            <h3 id="modal-title" class="modal-title"></h3>
+            <p id="modal-desc" class="modal-desc hidden"></p>
+            <div class="modal-actions">
+                <button id="modal-confirm-btn" class="modal-btn-confirm" type="button"></button>
+                <button id="modal-cancel-btn" class="modal-btn-cancel" type="button" onclick="document.getElementById('confirm-modal').classList.add('hidden')">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Всплывающий тост -->
+    <div id="toast" class="toast hidden">
+    <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+        <circle cx="50" cy="50" r="39.5" stroke="#1CB0F6" stroke-width="7" stroke-linecap="round"/>
+        <path d="M33 51 L45 63 L69 37" stroke="#1CB0F6" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span id="toast-message"></span>
+</div>
 
     <!-- Математическая клавиатура -->
     <div id="math-keyboard">
@@ -266,6 +444,10 @@
                     <div style="padding: 15px; font-size: 32px; font-weight: 900; color: #1CB0F6;" id="comp-time">0:00</div>
                 </div>
             </div>
+            <div id="comp-guest-warning" style="background: #f0f9ff; border: 2px solid #bae0fd; border-radius: 16px; padding: 16px; text-align: left; display: flex; flex-direction: column; gap: 10px;">
+                <p style="margin: 0; font-size: 14px; color: #4b4b4b; font-weight: 700; line-height: 1.4;">После закрытия вкладки ваш прогресс будет потерян. Войдите или зарегистрируйте аккаунт, чтобы сохранить его.</p>
+                <button class="auth-btn-primary" onclick="document.getElementById('auth-overlay').classList.remove('hidden')" style="font-size: 14px; padding: 12px 16px;">Войти или зарегистрироваться</button>
+            </div>
             <button class="check-btn" onclick="closeCompletionModal()" style="width: 100%; font-size: 18px;">
                 <span class="btn-text">Отлично</span>
             </button>
@@ -306,13 +488,14 @@
   const db = getFirestore(app);
 
   window.firebaseAuth = auth;
-  window.firebaseDb = db;
+window.firebaseDb = db;
+window.firebaseReady = true;
 
-  // Сигнал остальному коду, что Firebase готов
-  window.dispatchEvent(new Event("firebase-ready"));
+// Сигнал остальному коду, что Firebase готов
+window.dispatchEvent(new Event("firebase-ready"));
 </script>
 
-    <!-- Вот тут мы подключаем твой файл с логикой -->
+    <!-- Вот тут подключаем твой файл с логикой -->
     <script src="script.js" defer></script>
 </body>
 </html>
