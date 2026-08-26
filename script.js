@@ -46,7 +46,7 @@ function onFirebaseReady(callback) {
                 return;
             }
 
-            topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #1CB0F6; font-weight: 800; font-size: 20px;">Загрузка тем...</div>';
+            topicsContainer.innerHTML = '<div style="text-align:center; padding: 40px;"><div class="topics-loading-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div><div style="color: #1CB0F6; font-weight: 800; font-size: 14px;">Загрузка тем</div></div>';
 
             try {
                 const fetchPromises = TOPIC_URLS.map(url => fetch(url).then(res => {
@@ -1123,9 +1123,8 @@ currentTopicBaseId = topic.baseId;
     btn.style.backgroundColor = topic.color;
     btn.style.setProperty('--shadow-color', shadowColor);
 
-    const isRegularLesson = !(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator));
-    const isCompleted = isRegularLesson && topic.baseId && userProgress[topic.baseId] &&
-        userProgress[topic.baseId][lessonId] && userProgress[topic.baseId][lessonId].completed;
+    const isCompleted = topic.baseId && userProgress[topic.baseId] &&
+    userProgress[topic.baseId][lessonId] && userProgress[topic.baseId][lessonId].completed;
 
     if (isCompleted) {
         renderLevelCircleCheckmark(btn, false);
@@ -1781,7 +1780,7 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
         }
 
         function goToReportForm() {
-            window.open('https://forms.gle/HWW5ci8TV5Hu9M598', '_blank');
+            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
             closeReportModal();
         }
 
@@ -2775,6 +2774,10 @@ async function markLessonComplete(topicId, lessonId, failedTasks) {
   const db = window.firebaseDb;
   if (!auth.currentUser) return;
 
+  if (!userProgress[topicId]) userProgress[topicId] = {};
+  userProgress[topicId][lessonId] = { completed: true, failedTasks: failedTasks };
+  saveProgressToLocalCache(auth.currentUser.uid);
+
   const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js");
 
   try {
@@ -2797,6 +2800,14 @@ async function markLessonComplete(topicId, lessonId, failedTasks) {
   }
 }
 
+function saveProgressToLocalCache(uid) {
+  try {
+    localStorage.setItem("cachedProgress_" + uid, JSON.stringify(userProgress));
+  } catch (err) {
+    console.error("Ошибка сохранения кэша прогресса:", err);
+  }
+}
+
 async function loadUserProgress() {
   const auth = window.firebaseAuth;
   const db = window.firebaseDb;
@@ -2805,17 +2816,23 @@ async function loadUserProgress() {
     return;
   }
 
+  try {
+    const cached = localStorage.getItem("cachedProgress_" + auth.currentUser.uid);
+    if (cached) userProgress = JSON.parse(cached);
+  } catch (err) {
+    console.error("Ошибка чтения кэша прогресса:", err);
+  }
+
   const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js");
 
   try {
     const snap = await getDoc(doc(db, "users", auth.currentUser.uid));
     userProgress = snap.exists() ? (snap.data().progress || {}) : {};
+    saveProgressToLocalCache(auth.currentUser.uid);
   } catch (err) {
     console.error("Ошибка загрузки прогресса:", err);
-    userProgress = {};
   }
 }
-
 onFirebaseReady(() => {
   const auth = window.firebaseAuth;
   import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js").then(({ onAuthStateChanged }) => {
@@ -3037,19 +3054,15 @@ function renderProgressTable() {
         let completedLessons = 0;
 
         t.subtopics.forEach(sub => {
-            sub.levels.forEach(level => {
-                const lessonId = typeof level === 'object' ? level.lessonId : level;
-                const lesson = COURSE_DATA.lessons[lessonId];
-                const isRegularLesson = !(lesson && (lesson.isTest || lesson.isRepetition || lesson.isGenerator));
-                
-                if (isRegularLesson) {
-                    totalLessons++;
-                    if (t.baseId && userProgress[t.baseId] && userProgress[t.baseId][lessonId] && userProgress[t.baseId][lessonId].completed) {
-                        completedLessons++;
-                    }
-                }
-            });
-        });
+    sub.levels.forEach(level => {
+        const lessonId = typeof level === 'object' ? level.lessonId : level;
+
+        totalLessons++;
+        if (t.baseId && userProgress[t.baseId] && userProgress[t.baseId][lessonId] && userProgress[t.baseId][lessonId].completed) {
+            completedLessons++;
+        }
+    });
+});
 
         const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
         const isComplete = progress === 100 && totalLessons > 0;
@@ -3152,4 +3165,4 @@ function showToast(text) {
     setTimeout(() => {
         toast.classList.add('hidden');
     }, 2500);
-                }
+}
