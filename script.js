@@ -14,6 +14,14 @@ function onFirebaseReady(callback) {
             lessons: {}
         };
 
+// Проверка: является ли элемент levels заголовком-оглавлением, а не уроком
+        function isSectionHeader(level) {
+            return typeof level === 'string' && level.trim().startsWith('###');
+        }
+        function getSectionHeaderText(level) {
+            return level.trim().slice(3).trim();
+        }
+
         // ===================================================
         // СЮДА ВСТАВЛЯТЬ ССЫЛКИ НА RAW ФАЙЛЫ С ГИТХАБА (в формате JSON)
         // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
@@ -323,11 +331,11 @@ let currentTopicBaseId = null;
                         const level = regularLevels[i];
                         finalLevels.push(level);
                         
-                        const levelId = typeof level === 'object' ? level.lessonId : level;
+              const levelId = typeof level === 'object' ? level.lessonId : level;
                         const lesson = COURSE_DATA.lessons[levelId];
-                        if (!lesson || !lesson.isTest) {
+                        if (!isSectionHeader(level) && (!lesson || !lesson.isTest)) {
                             regCount++;
-                        }
+                        }          
                         
                         let toInsert = pendingPlaced.filter(l => {
                             const lId = typeof l === 'object' ? l.lessonId : l;
@@ -578,6 +586,12 @@ let currentTopicBaseId = null;
                 document.getElementById('lesson-dropdown').classList.remove('hidden');
                 currentAppState = 'lesson_dropdown';
             }
+
+// 8b. Report Modal (открыт напрямую из объяснения, без dropdown)
+            else if (currentAppState === 'report_modal' && targetPage === 'lesson') {
+                document.getElementById('report-modal-overlay').classList.add('hidden');
+                currentAppState = 'lesson';
+            }
             // 9. Path -> Topics
             else if (currentAppState === 'path' && targetPage === 'topics') {
                 navigateMenu('page-topics', true);
@@ -745,7 +759,8 @@ setTimeout(() => {
             '10 задание': { subtitle: 'Вероятности', icon: 'dices' },
             '11 задание': { subtitle: 'Графики функций', icon: 'line-chart' },
             '13 задание': { subtitle: 'Решение неравенств', icon: 'greater-equal' },
-            '14 задание': { subtitle: 'Прогрессии', icon: 'trending-up' }
+            '14 задание': { subtitle: 'Прогрессии', icon: 'trending-up' },
+'15 задание': { subtitle: 'Треугольники', icon: 'triangle' }
         };
 
         function getRepetitionTopicMeta(topic) {
@@ -766,7 +781,8 @@ setTimeout(() => {
                 dices: '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
                 'line-chart': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-8"/></svg>',
                 'greater-equal': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 5-14 5"/><path d="M5 20l14-5"/></svg>',
-                'trending-up': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-10"/><path d="M14 5h7v7"/></svg>'
+                'trending-up': '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-10"/><path d="M14 5h7v7"/></svg>',
+                triangle: '<svg class="repetition-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4 L4 20 L20 20 Z"/><path d="M4 15 L8 15 L8 20"/></svg>'
             };
             return icons[iconName] || icons.calculator;
         }
@@ -1091,9 +1107,19 @@ currentTopicBaseId = topic.baseId;
 
             const pathContainer = document.getElementById('path-container');
             pathContainer.innerHTML = '';
+            pathContainer.classList.toggle('starts-with-divider', subtopic.levels.length > 0 && isSectionHeader(subtopic.levels[0]));
 
             let displayCounter = 1;
           subtopic.levels.forEach((level, index) => {
+if (isSectionHeader(level)) {
+        const divider = document.createElement('div');
+        divider.className = 'path-section-divider';
+        const span = document.createElement('span');
+        span.innerText = getSectionHeaderText(level);
+        divider.appendChild(span);
+        pathContainer.appendChild(divider);
+        return;
+    }
     const lessonId = typeof level === 'object' ? level.lessonId : level;
     const lesson = COURSE_DATA.lessons[lessonId];
     
@@ -1411,9 +1437,10 @@ currentLessonFailedTasks = [];
             document.getElementById('l-main').scrollTop = 0;
             const task = currentLesson.tasks[currentTaskIndex];
 
-            // Заголовок и путь
-            const taskCountText = currentLesson.isGenerator ? ` (Задание ${currentTaskIndex + 1})` : (currentLesson.tasks.length > 1 ? ` (Задание ${currentTaskIndex + 1} из ${currentLesson.tasks.length})` : '');
-            document.getElementById('l-path').innerText = currentLesson.path + taskCountText;
+            // Прогресс-бар вместо текста пути
+            const totalTasks = currentLesson.tasks.length;
+            const progressPercent = totalTasks > 0 ? Math.min(100, (currentTaskIndex / totalTasks) * 100) : 0;
+            document.getElementById('l-progress-fill').style.width = progressPercent + '%';
             document.getElementById('l-title').innerText = currentLesson.title;
 
             // Динамическая генерация текста и кода
@@ -1452,42 +1479,9 @@ currentLessonFailedTasks = [];
     } else if (key.toLowerCase().startsWith('graph')) {
     const graphCommands = task[key];
     if (Array.isArray(graphCommands) && graphCommands.length > 0) {
-        const graphWrapper = document.createElement('div');
-        graphWrapper.className = 'graph-box-wrapper';
-        graphWrapper.style.width = '100%';
-        graphWrapper.style.aspectRatio = '1 / 1';
-        graphWrapper.style.margin = '12px 0';
-        graphWrapper.style.transition = 'aspect-ratio 0.2s ease';
-
-        const iframe = document.createElement('iframe');
-        iframe.src = 'https://ignatt002.github.io/graphics/';
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = '2px solid var(--border-color)';
-        iframe.style.borderRadius = '20px';
-        iframe.style.boxSizing = 'border-box';
-        iframe.setAttribute('title', 'graph');
-
-        const commandsStr = graphCommands.join('\n');
-
-        iframe.addEventListener('load', () => {
-            iframe.contentWindow.postMessage({ type: 'render', commands: commandsStr }, '*');
-        });
-
-        window.addEventListener('message', function handleGraphSize(event) {
-            if (event.source === iframe.contentWindow && event.data && event.data.type === 'graph-size') {
-                const ratio = event.data.ratio;
-                if (ratio && isFinite(ratio) && ratio > 0) {
-                    graphWrapper.style.aspectRatio = ratio;
-                }
-            }
-        });
-
-        graphWrapper.appendChild(iframe);
-        bubble.appendChild(graphWrapper);
+        bubble.appendChild(createGraphBox(graphCommands));
     }
-}
-}
+}}
 
             // Сброс полей
             const lAnswer = document.getElementById('l-answer');
@@ -1575,6 +1569,11 @@ function showCompletionModal() {
 markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks);
   justCompletedLessonId = currentLessonId;
 
+    const questData = getDailyQuestData();
+    questData.lesson = 1;
+    if (currentLesson && currentLesson.isRepetition) questData.repetition = 1;
+    saveDailyQuestData(questData);
+
     const guestWarning = document.getElementById('comp-guest-warning');
     const isLoggedIn = window.firebaseAuth && window.firebaseAuth.currentUser;
     if (guestWarning) guestWarning.style.display = isLoggedIn ? 'none' : 'flex';
@@ -1597,18 +1596,14 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
         }
 
         function closeCompletionModal() {
-            const overlay = document.getElementById('completion-modal-overlay');
-            const content = document.getElementById('completion-modal-content');
-            overlay.style.opacity = '0';
-            content.style.transform = 'scale(0.9)';
-            setTimeout(() => {
-                overlay.classList.add('hidden');
-                if (currentAppState === 'lesson') {
-                    history.back();
-                } else {
-                    actuallyCloseLesson();
-                }
-            }, 300);
+    const overlay = document.getElementById('completion-modal-overlay');
+    const content = document.getElementById('completion-modal-content');
+    overlay.style.opacity = '0';
+    content.style.transform = 'scale(0.9)';
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+        showDailyQuestsModal();
+    }, 300);
         }
 
         function actuallyCloseLesson() {
@@ -1656,9 +1651,12 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
             
             const theory = (currentLesson && currentLesson.theory) || subtopicTheory || (currentTopic && currentTopic.theory);
             
-            if (!currentLesson || !showTheoryBtn || !theory) return;
-            
-            document.getElementById('t-title').innerText = currentLesson.title;
+if (!currentLesson || !showTheoryBtn || !theory) return;
+    
+    const theoryTitle = (currentTopic && currentSubtopicIndex !== null && currentTopic.subtopics[currentSubtopicIndex])
+        ? currentTopic.subtopics[currentSubtopicIndex].title
+        : (currentTopic ? currentTopic.title : currentLesson.title);
+    document.getElementById('t-title').innerText = theoryTitle;
             
             const bubble = document.getElementById('t-example-bubble');
             bubble.innerHTML = '';
@@ -1684,6 +1682,11 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
                         }
                         div.innerHTML = codeText.replace(/\n/g, '<br>');
                         bubble.appendChild(div);
+                    }
+                } else if (key.toLowerCase().startsWith('graph')) {
+                    const graphCommands = theory[key];
+                    if (Array.isArray(graphCommands) && graphCommands.length > 0) {
+                        bubble.appendChild(createGraphBox(graphCommands));
                     }
                 }
             }
@@ -1736,6 +1739,11 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
                         }
                         div.innerHTML = codeText.replace(/\n/g, '<br>');
                         bubble.appendChild(div);
+                    }
+                } else if (key.toLowerCase().startsWith('graph')) {
+                    const graphCommands = theory[key];
+                    if (Array.isArray(graphCommands) && graphCommands.length > 0) {
+                        bubble.appendChild(createGraphBox(graphCommands));
                     }
                 }
             }
@@ -1790,7 +1798,7 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
         document.addEventListener('click', (e) => {
             const dropdown = document.getElementById('lesson-dropdown');
             const menuBtn = document.querySelector('.lesson-menu-btn');
-            if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && e.target !== menuBtn) {
+            if (dropdown && !dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !menuBtn.contains(e.target)) {
                 dropdown.classList.add('hidden');
                 if (currentAppState === 'lesson_dropdown') {
                     history.back();
@@ -1820,10 +1828,33 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
         }
 
         function goToReportForm() {
-            window.open('https://docs.google.com/forms/d/e/1FAIpQLSe9asK8LpTdcIIzj6oqX0HRHvxe-o2qU6Gfu1mG4CuaZLzj6A/viewform', '_blank');
+            window.open('https://forms.gle/r1MJEc5GiBF64bHD6', '_blank');
             closeReportModal();
         }
+function copyLessonCode() {
+            const code = document.getElementById('report-lesson-code').innerText;
+            if (!code) return;
 
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code)
+                    .then(() => showToast('Код скопирован!'))
+                    .catch(() => showToast('Не удалось скопировать'));
+            } else {
+                const temp = document.createElement('textarea');
+                temp.value = code;
+                temp.style.position = 'fixed';
+                temp.style.opacity = '0';
+                document.body.appendChild(temp);
+                temp.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('Код скопирован!');
+                } catch (e) {
+                    showToast('Не удалось скопировать');
+                }
+                document.body.removeChild(temp);
+            }
+        }
         function resetErrorState() {
             const lAnswer = document.getElementById('l-answer');
             lAnswer.style.borderColor = '';
@@ -1977,6 +2008,11 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
                         lAnswer.style.backgroundColor = "var(--success-bg)";
                         lAnswer.style.color = "var(--success-shadow)";
                         lAnswer.disabled = true;
+
+                        if (!currentLesson.isGenerator && currentTaskIndex === currentLesson.tasks.length - 1) {
+                            const progressFill = document.getElementById('l-progress-fill');
+                            if (progressFill) progressFill.style.width = '100%';
+                        }
                     } else {
                         // Ошибка
                         footer.className = 'lesson-footer state-error';
@@ -2071,6 +2107,8 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
                 }
             } else {
                 currentTaskIndex++;
+                const progressFill = document.getElementById('l-progress-fill');
+                if (progressFill) progressFill.style.width = '100%';
                 showCompletionModal();
             }
         }
@@ -2165,6 +2203,9 @@ markLessonComplete(currentTopicBaseId, currentLessonId, currentLessonFailedTasks
                 void btnCloseExplain.offsetWidth; // trigger reflow
                 btnCloseExplain.classList.add('btn-animated');
                 btnCloseExplain.style.animationDelay = `${delayCount * 0.1}s`;
+btnCloseExplain.addEventListener('animationend', () => {
+                    btnCloseExplain.classList.remove('btn-animated');
+                }, { once: true });
                 
                 // Запускаем анимацию высоты до 100vh и плавно показываем новый контент
                 footer.style.height = '100vh';
@@ -2717,6 +2758,8 @@ togglePasswordBtn.addEventListener("click", () => {
     authSubmitBtn.querySelector(".auth-btn-text").textContent = isRegisterMode ? "Зарегистрироваться" : "Войти";
     authToggle.textContent = isRegisterMode ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться";
     authError.style.display = "none";
+    document.getElementById('auth-consent-group').classList.toggle('hidden', !isRegisterMode);
+    document.getElementById('auth-consent-checkbox').checked = false;
   });
 
   // Отправка формы
@@ -2729,6 +2772,14 @@ authSubmitBtn.disabled = true;
 
     if (!email || !password) {
     authError.textContent = "Заполните все поля";
+    authError.style.display = "block";
+    authSubmitBtn.classList.remove("loading");
+    authSubmitBtn.disabled = false;
+    return;
+    }
+
+if (isRegisterMode && !document.getElementById('auth-consent-checkbox').checked) {
+    authError.textContent = "Нужно принять пользовательское соглашение и политику конфиденциальности";
     authError.style.display = "block";
     authSubmitBtn.classList.remove("loading");
     authSubmitBtn.disabled = false;
@@ -2788,9 +2839,11 @@ try {
     onAuthStateChanged(auth, (user) => {
       if (user) {
     authAccountBtn.classList.add('hidden');
+    document.getElementById('account-btn-divider')?.classList.add('hidden');
 } else {
     authAccountBtn.textContent = "Войти";
     authAccountBtn.classList.remove('hidden');
+    document.getElementById('account-btn-divider')?.classList.remove('hidden');
       }
     });
   });
@@ -3201,4 +3254,151 @@ function showToast(text) {
     setTimeout(() => {
         toast.classList.add('hidden');
     }, 2500);
-                      }
+              }
+
+function getTodayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getDailyQuestData() {
+    try {
+        return JSON.parse(localStorage.getItem('dailyQuests_' + getTodayKey())) || { lesson: 0, repetition: 0 };
+    } catch (e) {
+        return { lesson: 0, repetition: 0 };
+    }
+}
+
+function saveDailyQuestData(data) {
+    localStorage.setItem('dailyQuests_' + getTodayKey(), JSON.stringify(data));
+}
+
+function showDailyQuestsModal() {
+    const data = getDailyQuestData();
+    const quests = [
+        {
+            title: 'Пройти 1 урок в день',
+            subtitle: 'Ежедневная цель',
+            progress: data.lesson,
+            target: 1,
+            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>'
+        },
+        {
+            title: 'Повторить одну тему',
+            subtitle: 'На странице повторения',
+            progress: data.repetition,
+            target: 1,
+            icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>'
+        }
+    ];
+
+    const container = document.getElementById('daily-quests-list');
+    container.innerHTML = quests.map(q => {
+        const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+        const isComplete = q.progress >= q.target;
+        const startPct = getSavedQuestBarPct(q.title);
+return `
+        <div class="table-row">
+            <div class="row-top">
+                <div class="row-left">
+                    <div class="row-icon-box ${isComplete ? 'complete' : 'incomplete'}">${q.icon}</div>
+                    <div class="row-titles">
+                        <div class="title">${q.title}</div>
+                        <div class="subtitle">${q.subtitle}</div>
+                    </div>
+                </div>
+                <div class="row-right">
+                    <span class="progress-text ${isComplete ? 'complete' : 'incomplete'}">${pct}%</span>
+                    ${isComplete ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="#eefce8" stroke="#58CC00" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>' : ''}
+                </div>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill ${isComplete ? 'complete' : 'incomplete'}" style="width: ${startPct}%" data-pct="${pct}" data-title="${q.title}">
+                    <div class="specular-highlight"></div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    const overlay = document.getElementById('daily-quests-overlay');
+    overlay.classList.remove('hidden');
+    void overlay.offsetWidth;
+    overlay.style.opacity = '1';
+    document.getElementById('daily-quests-content').style.transform = 'scale(1)';
+
+    setTimeout(() => {
+        container.querySelectorAll('.progress-bar-fill').forEach(bar => {
+            const finalPct = bar.getAttribute('data-pct');
+            bar.style.width = finalPct + '%';
+            saveQuestBarPct(bar.getAttribute('data-title'), finalPct);
+        });
+    }, 150);
+}
+
+function getSavedQuestBarPct(title) {
+    try {
+        const saved = JSON.parse(localStorage.getItem('dailyQuestsBarPct_' + getTodayKey())) || {};
+        return saved[title] || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function saveQuestBarPct(title, pct) {
+    let saved = {};
+    try {
+        saved = JSON.parse(localStorage.getItem('dailyQuestsBarPct_' + getTodayKey())) || {};
+    } catch (e) {}
+    saved[title] = pct;
+    localStorage.setItem('dailyQuestsBarPct_' + getTodayKey(), JSON.stringify(saved));
+}
+function closeDailyQuestsModal() {
+    const overlay = document.getElementById('daily-quests-overlay');
+    const content = document.getElementById('daily-quests-content');
+    overlay.style.opacity = '0';
+    content.style.transform = 'scale(0.9)';
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+        if (currentAppState === 'lesson') {
+            history.back();
+        } else {
+            actuallyCloseLesson();
+        }
+    }, 300);
+          }
+
+function createGraphBox(graphCommands) {
+    const graphWrapper = document.createElement('div');
+    graphWrapper.className = 'graph-box-wrapper';
+    graphWrapper.style.width = '100%';
+    graphWrapper.style.aspectRatio = '1 / 1';
+    graphWrapper.style.margin = '12px 0';
+    graphWrapper.style.transition = 'aspect-ratio 0.2s ease';
+
+    const iframe = document.createElement('iframe');
+    iframe.src = 'https://ignatt002.github.io/graphics/';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '2px solid var(--border-color)';
+    iframe.style.borderRadius = '20px';
+    iframe.style.boxSizing = 'border-box';
+    iframe.setAttribute('title', 'graph');
+
+    const commandsStr = graphCommands.join('\n');
+
+    iframe.addEventListener('load', () => {
+        iframe.contentWindow.postMessage({ type: 'render', commands: commandsStr }, '*');
+    });
+
+    window.addEventListener('message', function handleGraphSize(event) {
+        if (event.source === iframe.contentWindow && event.data && event.data.type === 'graph-size') {
+            const ratio = event.data.ratio;
+            if (ratio && isFinite(ratio) && ratio > 0) {
+                graphWrapper.style.aspectRatio = ratio;
+            }
+        }
+    });
+
+    graphWrapper.appendChild(iframe);
+    return graphWrapper;
+            }
