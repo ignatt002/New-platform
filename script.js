@@ -1,3 +1,12 @@
+// Виброотклик при нажатии на любую кнопку (Android/Chrome; на iPhone Safari
+// эту функцию браузер не поддерживает — просто ничего не произойдёт)
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('button');
+    if (btn && !btn.disabled && 'vibrate' in navigator) {
+        navigator.vibrate(15);
+    }
+});
+
 function onFirebaseReady(callback) {
   if (window.firebaseReady) {
     callback(); // Firebase уже готов — запускаем сразу
@@ -1326,10 +1335,6 @@ currentLessonFailedTasks = [];
                         return;
                     }
                 }
-            }
-
-            if (typeof autoGenerateLesson === 'function' && Array.isArray(currentLesson.tasks)) {
-                currentLesson.tasks = autoGenerateLesson(currentLesson.tasks);
             }
 
             currentTaskIndex = 0;
@@ -3321,7 +3326,6 @@ togglePasswordBtn.addEventListener("click", () => {
     authError.style.display = "none";
     document.getElementById('auth-consent-group').classList.toggle('hidden', !isRegisterMode);
     document.getElementById('auth-consent-checkbox').checked = false;
-    document.getElementById('auth-turnstile-group').classList.toggle('hidden', !isRegisterMode);
   });
 
   // Отправка формы
@@ -3347,17 +3351,6 @@ if (isRegisterMode && !document.getElementById('auth-consent-checkbox').checked)
     authSubmitBtn.disabled = false;
     return;
     }
-    let turnstileToken = "";
-if (isRegisterMode) {
-    turnstileToken = (typeof turnstile !== "undefined") ? turnstile.getResponse() : "";
-    if (!turnstileToken) {
-        authError.textContent = "Подтвердите, что вы не робот";
-        authError.style.display = "block";
-        authSubmitBtn.classList.remove("loading");
-        authSubmitBtn.disabled = false;
-        return;
-    }
-}
 
 const { signInWithCustomToken } =
     await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js");
@@ -3366,7 +3359,7 @@ async function attemptAuthRequest(action, email, password) {
     const res = await fetch("https://d5dkes6tf8o0uff54egi.4b4k4pg5.apigw.yandexcloud.net/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, login: email, password, turnstileToken })
+        body: JSON.stringify({ action, login: email, password })
     });
     const data = await res.json();
     return { res, data };
@@ -3974,4 +3967,4 @@ function createGraphBox(graphCommands) {
 
     graphWrapper.appendChild(iframe);
     return graphWrapper;
-}
+              }
