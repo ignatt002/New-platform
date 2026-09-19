@@ -13,6 +13,7 @@ let draftDpr = window.devicePixelRatio || 1;
 let draftIsFullscreen = false;
 let draftFullscreenPlaceholder = null;
 let draftTaskPlaceholder = null;
+let draftStrokesShiftedForFullscreen = false;
 
 // Все линии хранятся в "мировых" координатах — не зависят от масштаба/сдвига камеры
 let draftStrokes = [];
@@ -271,8 +272,18 @@ function toggleDraftFullscreen() {
         const canvas = document.getElementById('l-draft-canvas');
         const pinBlock = document.getElementById('l-character-row');
         if (canvas && pinBlock) {
-            const availableWidth = canvas.parentElement.clientWidth;
             const blockWidth = pinBlock.offsetWidth;
+
+            if (!draftStrokesShiftedForFullscreen && draftStrokes.length > 0) {
+                const shiftAmount = 16 + blockWidth + 40;
+                draftStrokes.forEach(stroke => {
+                    stroke.points.forEach(p => { p.x += shiftAmount; });
+                });
+                pushDraftHistory();
+                draftStrokesShiftedForFullscreen = true;
+            }
+
+            const availableWidth = canvas.parentElement.clientWidth;
             const anchor = 16;
             draftPanX = (availableWidth - blockWidth * draftZoom) / 2 - anchor * draftZoom;
             redrawDraftCanvas();
@@ -337,6 +348,7 @@ function updateDraftHistoryButtons() {
 // Вызывается из loadTask() в script.js при переходе к новому заданию
 function resetDraftCanvasForNewTask() {
     if (draftIsFullscreen) toggleDraftFullscreen();
+    draftStrokesShiftedForFullscreen = false;
     draftStrokes = [];
     draftCurrentStroke = null;
     draftHistory = [];
