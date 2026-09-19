@@ -3893,6 +3893,14 @@ return `
     document.getElementById('daily-quests-content').style.transform = 'scale(1)';
 
     setTimeout(() => {
+        // весёлая быстрая дробь вибрации ровно на время заполнения полосы (2.5с в CSS)
+        if ('vibrate' in navigator) {
+            const buzz = [];
+            for (let i = 0; i < 28; i++) buzz.push(25, 60); // частые короткие тики
+            buzz.push(90); // финальный акцент в конце
+            navigator.vibrate(buzz);
+        }
+
         container.querySelectorAll('.progress-bar-fill').forEach(bar => {
             const finalPct = bar.getAttribute('data-pct');
             bar.style.width = finalPct + '%';
@@ -3967,4 +3975,4 @@ function createGraphBox(graphCommands) {
 
     graphWrapper.appendChild(iframe);
     return graphWrapper;
-              }
+}
