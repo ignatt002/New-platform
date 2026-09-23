@@ -3317,6 +3317,20 @@ togglePasswordBtn.addEventListener("click", () => {
           });
         });
 
+function tryRenderTurnstile(attemptsLeft) {
+    if (window.turnstileWidgetId !== undefined) return;
+    if (typeof turnstile !== "undefined") {
+        window.turnstileWidgetId = turnstile.render('#turnstile-widget-container', {
+            sitekey: '0x4AAAAAAE6lU4gh3B9UfXaL',
+            action: 'register'
+        });
+        return;
+    }
+    if (attemptsLeft > 0) {
+        setTimeout(() => tryRenderTurnstile(attemptsLeft - 1), 300);
+    }
+}
+
   // Переключение между "Вход" и "Регистрация"
   authToggle.addEventListener("click", () => {
     isRegisterMode = !isRegisterMode;
@@ -3326,6 +3340,10 @@ togglePasswordBtn.addEventListener("click", () => {
     authError.style.display = "none";
     document.getElementById('auth-consent-group').classList.toggle('hidden', !isRegisterMode);
     document.getElementById('auth-consent-checkbox').checked = false;
+document.getElementById('auth-turnstile-group').classList.toggle('hidden', !isRegisterMode);
+if (isRegisterMode) {
+    tryRenderTurnstile(20);
+}
   });
 
   // Отправка формы
@@ -3351,7 +3369,17 @@ if (isRegisterMode && !document.getElementById('auth-consent-checkbox').checked)
     authSubmitBtn.disabled = false;
     return;
     }
-
+let turnstileToken = "";
+if (isRegisterMode) {
+    turnstileToken = (typeof turnstile !== "undefined" && window.turnstileWidgetId !== undefined) ? turnstile.getResponse(window.turnstileWidgetId) : "";
+    if (!turnstileToken) {
+        authError.textContent = "Подтвердите, что вы не робот";
+        authError.style.display = "block";
+        authSubmitBtn.classList.remove("loading");
+        authSubmitBtn.disabled = false;
+        return;
+    }
+}
 const { signInWithCustomToken } =
     await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js");
 
@@ -3359,7 +3387,7 @@ async function attemptAuthRequest(action, email, password) {
     const res = await fetch("https://d5dkes6tf8o0uff54egi.4b4k4pg5.apigw.yandexcloud.net/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, login: email, password })
+        body: JSON.stringify({ action, login: email, password, turnstileToken })
     });
     const data = await res.json();
     return { res, data };
