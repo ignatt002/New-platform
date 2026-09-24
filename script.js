@@ -1,5 +1,4 @@
-// Виброотклик при нажатии на любую кнопку (Android/Chrome; на iPhone Safari
-// эту функцию браузер не поддерживает — просто ничего не произойдёт)
+// Виброотклик при нажатии на любую кнопку
 document.addEventListener('click', function (e) {
     const btn = e.target.closest('button');
     if (btn && !btn.disabled && 'vibrate' in navigator) {
@@ -32,8 +31,7 @@ function onFirebaseReady(callback) {
         }
 
         // ===================================================
-        // СЮДА ВСТАВЛЯТЬ ССЫЛКИ НА RAW ФАЙЛЫ С ГИТХАБА (в формате JSON)
-        // Пример: "https://raw.githubusercontent.com/username/repo/main/topic1.json"
+        // база уроков
         // ===================================================
         const TOPIC_URLS = [
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/6-zadanie.json",
@@ -48,8 +46,7 @@ function onFirebaseReady(callback) {
         ];
 
         // ===================================================
-        // СЮДА ВСТАВЛЯТЬ ССЫЛКИ НА ФАЙЛЫ СО ШПАРГАЛКАМИ (в формате JSON)
-        // Пример: "https://raw.githubusercontent.com/username/repo/main/cheatsheets.json"
+        // база шпаргалок
         // ===================================================
         const CHEAT_SHEET_URLS = [
   "https://cdn.jsdelivr.net/gh/ignatt002/blait@main/Discriminant",
