@@ -27,7 +27,7 @@
     overflow-x: hidden;
 }
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Nunito', sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
     margin: 0;
