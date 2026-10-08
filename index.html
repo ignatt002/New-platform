@@ -1,1 +1,131 @@
-hereg
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FiveCore переехал!</title>
+    
+    <!-- Подключение шрифтов Montserrat и Nunito из Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            background-color: #ffffff;
+            margin: 0;
+            padding: 40px 24px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            text-align: left; /* Строгое выравнивание по левому краю */
+        }
+
+        h1 {
+            font-family: 'Montserrat', sans-serif;
+            color: #1CB0F6;
+            font-size: 3.5rem; /* Большой заголовок */
+            font-weight: 800;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+
+        p {
+            font-family: 'Nunito', sans-serif;
+            font-size: 18px; /* Размер шрифта около 18px по ТЗ */
+            color: #4b4b4b;
+            line-height: 1.6;
+            margin-bottom: 2.5rem;
+        }
+
+        p a {
+            color: #1CB0F6;
+            text-decoration: none;
+            font-weight: 600;
+            word-wrap: break-word;
+            transition: color 0.2s ease;
+        }
+
+        p a:hover {
+            text-decoration: underline;
+            color: #1899D6;
+        }
+
+        .duo-button {
+            font-family: 'Nunito', sans-serif;
+            display: inline-block;
+            background-color: #1CB0F6;
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 16px 32px;
+            border-radius: 16px; /* Сильно скругленные углы */
+            box-shadow: 0 5px 0 #1899D6; /* Нижняя граница/тень */
+            border: none;
+            outline: none;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            
+            /* Быстрый транзишен для цвета при наведении и трансформации при клике */
+            transition: filter 0.1s, transform 0.1s, box-shadow 0.1s; 
+        }
+
+        .duo-button:hover {
+            filter: brightness(1.05);
+        }
+
+        /* Эффект физического продавливания */
+        .duo-button:active {
+            transform: translateY(5px); /* Кнопка уходит вниз на высоту тени */
+            box-shadow: 0 0 0 #1899D6; /* Тень полностью исчезагает */
+            filter: brightness(1);
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 24px 16px;
+            }
+            h1 {
+                font-size: 2.5rem;
+            }
+            .duo-button {
+                display: block;
+                text-align: center;
+                box-sizing: border-box;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>FiveCore переехал!</h1>
+        
+        <p>
+            Раньше ссылка на FiveCore была длинной и непонятной:<br>
+            <a href="https://ignatt002.github.io/New-platform/" target="_blank" rel="noopener noreferrer">https://ignatt002.github.io/New-platform/</a>
+            <br><br>
+            А сейчас она стала короткой и удобной:<br>
+            <a href="https://fivecore-web.github.io/" target="_blank" rel="noopener noreferrer">https://fivecore-web.github.io/</a>
+            <br><br>
+            Не теряйте!
+        </p>
+        
+        <a href="https://fivecore-web.github.io/" class="duo-button" target="_blank" rel="noopener noreferrer">Перейти на FiveCore</a>
+    </div>
+
+</body>
+</html>
